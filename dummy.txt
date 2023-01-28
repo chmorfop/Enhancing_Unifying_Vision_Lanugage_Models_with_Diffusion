@@ -1,0 +1,41 @@
+    # for d in dataset:
+    #     #print(type(d))
+    #     print(d[0]) # caption tokens
+    #     print(' '.join(GPT2Tokenizer.from_pretrained('gpt2').convert_ids_to_tokens(d[0])))
+    #     print()
+    #     print(d[1])  #maska
+    #     print()
+    #     print(d[2])
+    #     print(d[2].size()) # 1 x 512  # clip embeddings
+    #     print()
+    #     break
+
+
+    #train_dataloader = DataLoader(dataset, batch_size=1, drop_last=True)
+    #for idx, d in enumerate(train_dataloader):
+        #temp = idx
+        #temp_tokens, temp_mask, temp_prefix = d
+
+
+
+        with open(data_path, 'rb') as f:
+            all_data = pickle.load(f)
+
+{'image_id': 131557,
+'question': 'What are the sources of protein on this pizza?',
+ 'answer': 'cheese',
+ 'caption': 'A close up of a pizza pie on a plate.',
+ 'clip_embedding': 1024}
+
+
+
+    with open(args.data, 'rb') as f:
+        all_data = pickle.load(f)
+    print(all_data)
+    ans = []
+    for a in all_data.get('captions'):
+        ans.append(a.get('answer').split())
+    print(ans)
+    print()
+    ans.sort(key=lambda x: len(x))
+    print(ans)

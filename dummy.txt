@@ -39,3 +39,21 @@
     print()
     ans.sort(key=lambda x: len(x))
     print(ans)
+
+
+
+            ####################################################
+            # modified_mask = mask[:, dataset.prefix_length : -1]
+
+            # modified_mask_v2 = mask.squeeze()[ 10: ]
+            # bool_mask = modified_mask_v2.ge(1).unsqueeze(1)
+            # tempy  = logits.squeeze()
+            # tryy = tempy[bool_mask]
+            # valid_mask = need_predict == 1
+            # #valid_mask2 = target != self.padding_idx
+            # #assert (valid_mask.long() - valid_mask2.long()).abs().sum().cpu() == 0
+            # target = target[valid_mask]
+            # feat = feat[valid_mask]
+            # apo 1 -21 -50257 se 21 -50257 (from head model) tryy
+            # loss = nnf.cross_entropy(logits.reshape(-1, logits.shape[-1]), tokenized_answer.flatten(), ignore_index=0)
+            ####################################################

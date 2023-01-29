@@ -56,17 +56,17 @@ class ClipCocoDataset(Dataset):
 
         # SOS
         mask = torch.cat((torch.ones(self.prefix_length), mask), dim=0)  # adding prefix mask
-        return tokens, mask , tokenized_answer
+        return tokens, mask
 
     def __getitem__(self, item: int) -> Tuple[torch.Tensor, ...]:
-        tokens, mask, tokenized_answer = self.pad_tokens(item)
+        tokens, mask = self.pad_tokens(item)
         prefix = self.prefixes[self.caption2embedding[item]]
         if self.normalize_prefix:
             prefix = prefix.float()
             prefix = prefix / prefix.norm(2, -1)
 
         # tokenized caption, mask attention , (prefix --> actual image)
-        return tokens, mask, prefix, tokenized_answer
+        return tokens, mask, prefix
 
     def __init__(self, data_path: str,  prefix_length: int, gpt2_type: str = "gpt2",
                  normalize_prefix=False):
@@ -86,17 +86,19 @@ class ClipCocoDataset(Dataset):
         ##
         self.captions_tokens = []
         self.caption2embedding = []
-        self.temp_answers_tens = []
+        # self.temp_answers_tens = []
         max_seq_len = 0
+        max_ans_len = 0
         for i,caption in enumerate(captions_raw):
             # tokenize to caption
             self.captions_tokens.append(torch.tensor(self.tokenizer.encode(caption['question']+' '+caption['answer']) , dtype=torch.int64))
             # clip_embedding einai to sequential ID !!
             self.caption2embedding.append(caption["clip_embedding"])
             max_seq_len = max(max_seq_len, self.captions_tokens[-1].shape[0])
-            # temp = torch.tensor(self.tokenizer.encode(caption['answer']), dtype=torch.int64)
+
+            temp = torch.tensor(self.tokenizer.encode(caption['answer']), dtype=torch.int64)
             # self.temp_answers_tens.append(temp)
-            # max_seq_len = max(max_seq_len, temp.shape[0])
+            max_ans_len = max(max_ans_len, temp.shape[0])
         with open(f"{data_path[:-4]}_tokens.pkl", 'wb') as f:
             pickle.dump([self.captions_tokens, self.caption2embedding, self.answers, self.questions,max_seq_len], f)
         # all_len = torch.tensor([len(self.temp_answers_tens[i]) for i in range(len(self))]).float()
@@ -105,7 +107,9 @@ class ClipCocoDataset(Dataset):
         all_len = torch.tensor([len(self.captions_tokens[i]) for i in range(len(self))]).float()
         self.max_seq_len = min(int(all_len.mean() + all_len.std() * 10), int(all_len.max()))
         # self.max_seq_len = max_seq_len
-        print('max_seq_len of tokens :  ' + str(self.max_seq_len))
+        self.max_ans_len = max_ans_len
+        print('max_seq_len of whole tokens :  ' + str(self.max_seq_len))
+        print('max_ans_len of answers :  ' + str(self.max_ans_len))
 
 
 class MLP(nn.Module):
@@ -345,7 +349,6 @@ def train(dataset: ClipCocoDataset, model: ClipCaptionModel, args,
           lr: float = 2e-5, warmup_steps: int = 5000, output_dir: str = ".", output_prefix: str = ""):
 
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-
     batch_size = args.bs
     epochs = args.epochs
     # test_tokenizer = GPT2Tokenizer.from_pretrained('gpt2')
@@ -354,31 +357,33 @@ def train(dataset: ClipCocoDataset, model: ClipCaptionModel, args,
     model = model.to(device)
     model.train()
     optimizer = AdamW(model.parameters(), lr=lr)
-    train_dataloader = DataLoader(dataset, batch_size=batch_size, shuffle=True, drop_last=True)
+    train_dataloader = DataLoader(dataset, batch_size=batch_size, shuffle=False, drop_last=False)
     scheduler = get_linear_schedule_with_warmup(
         optimizer, num_warmup_steps=warmup_steps, num_training_steps=epochs * len(train_dataloader)
     )
-    #  always --> mask  1x40 , tokens 1x30, 1x512 img ... with respect to the dataset
-
     epoch_train_loss = []
     for epoch in range(epochs):
         print(f">>> Training epoch {epoch}")
         sys.stdout.flush()
         progress = tqdm(total=len(train_dataloader), desc=output_prefix)
         sum_train_loss = 0
-        for idx, (tokens, mask, prefix , tokenized_answer) in enumerate(train_dataloader):
+        for idx, (tokens, mask, prefix) in enumerate(train_dataloader):
 
+            temp = 'checkpoint'
             model.zero_grad()
-            tokens, mask, prefix , tokenized_answer = tokens.to(device), mask.to(device), prefix.to(device, dtype=torch.float32) , tokenized_answer.to(device)
+            tokens, mask, prefix = tokens.to(device), mask.to(device), prefix.to(device, dtype=torch.float32)
 
             outputs = model(tokens, prefix, mask)
             logits = outputs.logits[:, dataset.prefix_length - 1: -1]
-            modified_mask_v2 = mask.squeeze()[ 10: ]
-            bool_mask = modified_mask_v2.ge(1)
+            new_mask = mask[:,10:]
+            bool_mask = new_mask.ge(1).view(-1)
             final_logits = logits.reshape(-1, logits.shape[-1])
-            new_final_logits = final_logits[bool_mask]
+            finally_tok = tokens.view(-1)
 
-            loss = nnf.cross_entropy(new_final_logits, tokenized_answer.flatten(), ignore_index=0)
+            new_final_logits = final_logits[bool_mask]
+            finally_toky = finally_tok[bool_mask]
+
+            loss = nnf.cross_entropy(new_final_logits,finally_toky, ignore_index=0)
             sum_train_loss = sum_train_loss + loss.item()
             loss.backward()
             optimizer.step()
@@ -395,13 +400,14 @@ def train(dataset: ClipCocoDataset, model: ClipCaptionModel, args,
                 os.path.join(output_dir, f"{output_prefix}-{epoch:03d}.pt"),
             )
 
-    fig, axes = plt.subplots(1, figsize=(15, 15))
-    plt.plot(epochs, epoch_train_loss, color='b', linestyle='-', label='Training loss')
-    plt.title('Training Loss & Epochs', fontsize=16)
-    plt.xlabel('Epochs', fontsize=16)
-    plt.ylabel('Loss', fontsize=16)
-    plt.legend()
-    plt.savefig('./epoch_train_loss')
+    print(epoch_train_loss)
+    # fig, axes = plt.subplots(1, figsize=(15, 15))
+    # plt.plot(epochs, epoch_train_loss, color='b', linestyle='-', label='Training loss')
+    # plt.title('Training Loss & Epochs', fontsize=16)
+    # plt.xlabel('Epochs', fontsize=16)
+    # plt.ylabel('Loss', fontsize=16)
+    # plt.legend()
+    # plt.savefig('./epoch_train_loss')
 
     return model
 

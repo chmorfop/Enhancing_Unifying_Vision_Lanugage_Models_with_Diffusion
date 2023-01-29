@@ -11,6 +11,8 @@ import sys
 import argparse
 import json
 from typing import Tuple, Optional, Union
+import matplotlib.pyplot as plt
+
 
 
 class MappingType(Enum):
@@ -345,8 +347,8 @@ def train(dataset: ClipCocoDataset, model: ClipCaptionModel, args,
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
     batch_size = args.bs
-    epochs = 20
-    test_tokenizer = GPT2Tokenizer.from_pretrained('gpt2')
+    epochs = args.epochs
+    # test_tokenizer = GPT2Tokenizer.from_pretrained('gpt2')
     if not os.path.exists(output_dir):
         os.makedirs(output_dir)
     model = model.to(device)
@@ -357,10 +359,13 @@ def train(dataset: ClipCocoDataset, model: ClipCaptionModel, args,
         optimizer, num_warmup_steps=warmup_steps, num_training_steps=epochs * len(train_dataloader)
     )
     #  always --> mask  1x40 , tokens 1x30, 1x512 img ... with respect to the dataset
+
+    epoch_train_loss = []
     for epoch in range(epochs):
         print(f">>> Training epoch {epoch}")
         sys.stdout.flush()
         progress = tqdm(total=len(train_dataloader), desc=output_prefix)
+        sum_train_loss = 0
         for idx, (tokens, mask, prefix , tokenized_answer) in enumerate(train_dataloader):
 
             model.zero_grad()
@@ -373,23 +378,8 @@ def train(dataset: ClipCocoDataset, model: ClipCaptionModel, args,
             final_logits = logits.reshape(-1, logits.shape[-1])
             new_final_logits = final_logits[bool_mask]
 
-            ####################################################
-            # modified_mask = mask[:, dataset.prefix_length : -1]
-
-            # modified_mask_v2 = mask.squeeze()[ 10: ]
-            # bool_mask = modified_mask_v2.ge(1).unsqueeze(1)
-            # tempy  = logits.squeeze()
-            # tryy = tempy[bool_mask]
-            # valid_mask = need_predict == 1
-            # #valid_mask2 = target != self.padding_idx
-            # #assert (valid_mask.long() - valid_mask2.long()).abs().sum().cpu() == 0
-            # target = target[valid_mask]
-            # feat = feat[valid_mask]
-            ####################################################
-
-            # apo 1 -21 -50257 se 21 -50257 (from head model) tryy
-            # loss = nnf.cross_entropy(logits.reshape(-1, logits.shape[-1]), tokenized_answer.flatten(), ignore_index=0)
             loss = nnf.cross_entropy(new_final_logits, tokenized_answer.flatten(), ignore_index=0)
+            sum_train_loss = sum_train_loss + loss.item()
             loss.backward()
             optimizer.step()
             scheduler.step()
@@ -397,12 +387,22 @@ def train(dataset: ClipCocoDataset, model: ClipCaptionModel, args,
             progress.set_postfix({"loss": loss.item()})
             progress.update()
 
+        epoch_train_loss.append(sum_train_loss)
         progress.close()
         if epoch % args.save_every == 0 or epoch == epochs - 1:
             torch.save(
                 model.state_dict(),
                 os.path.join(output_dir, f"{output_prefix}-{epoch:03d}.pt"),
             )
+
+    fig, axes = plt.subplots(1, figsize=(15, 15))
+    plt.plot(epochs, epoch_train_loss, color='b', linestyle='-', label='Training loss')
+    plt.title('Training Loss & Epochs', fontsize=16)
+    plt.xlabel('Epochs', fontsize=16)
+    plt.ylabel('Loss', fontsize=16)
+    plt.legend()
+    plt.savefig('./epoch_train_loss')
+
     return model
 
 
@@ -427,7 +427,7 @@ def main():
     prefix_length = args.prefix_length
     # for ViT B 512 , ViT L 768, RESNET 640?
     prefix_dim = 640 if args.is_rn else 512
-
+    # args.data = './data/coco/oscar_split_ViT-B_32_trainy_vqa.pkl'
     dataset = ClipCocoDataset(args.data, prefix_length, normalize_prefix=args.normalize_prefix)
     args.mapping_type = {'mlp': MappingType.MLP, 'transformer': MappingType.Transformer}[args.mapping_type]
 

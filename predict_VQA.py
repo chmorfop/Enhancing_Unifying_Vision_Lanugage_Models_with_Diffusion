@@ -203,7 +203,6 @@ class Transformer(nn.Module):
         print('Initiate Transformer *** with 8 Transformer layers ! ')
         dim_ref = dim_ref if dim_ref is not None else dim_self
         self.enc_dec = enc_dec
-        print(' self.enc_dec ' + str(self.enc_dec))
         if enc_dec:
             num_layers = num_layers * 2
         layers = []
@@ -518,10 +517,12 @@ def generate2(
     top_p=0.8,
     temperature=1.0,
     stop_token: str = ".",
+    question = ''
 ):
     model.eval()
     generated_num = 0
     generated_list = []
+    # allo token index for . kai allo for EOS // tokenizer.eos_token_id
     stop_token_index = tokenizer.encode(stop_token)[0]
     filter_value = -float("Inf")
     device = next(model.parameters()).device
@@ -530,7 +531,18 @@ def generate2(
 
         for entry_idx in range(entry_count):
             if embed is not None:
-                generated = embed
+                #generated = embed
+                tok_q = torch.tensor(tokenizer.encode(question))
+                embedding_text = model.gpt.transformer.wte(tok_q).unsqueeze(0)
+                generated = torch.cat((embed, embedding_text), dim=1)
+
+                # execute clip project with prefix!!
+                # tranform to   --> 1 x 10 x 768 (self.gpt_embedding_size 768)
+                # prefix_projections = self.clip_project(prefix).view(-1, self.prefix_length, self.gpt_embedding_size)
+                # kanoume concatenate ta prefix_projections & embedding_text
+                # concat 1 x 40 x 768
+                # embedding_cat = torch.cat((prefix_projections, embedding_text), dim=1)
+
             else:
                 if tokens is None:
                     tokens = torch.tensor(tokenizer.encode(prompt))
@@ -543,6 +555,7 @@ def generate2(
                 outputs = model.gpt(inputs_embeds=generated)
                 logits = outputs.logits
                 logits = logits[:, -1, :] / (temperature if temperature > 0 else 1.0)
+
                 sorted_logits, sorted_indices = torch.sort(logits, descending=True)
                 cumulative_probs = torch.cumsum(
                     nnf.softmax(sorted_logits, dim=-1), dim=-1
@@ -557,6 +570,7 @@ def generate2(
                 logits[:, indices_to_remove] = filter_value
                 next_token = torch.argmax(logits, -1).unsqueeze(0)
                 next_token_embed = model.gpt.transformer.wte(next_token)
+                # if first time else concar
                 if tokens is None:
                     tokens = next_token
                 else:
@@ -601,9 +615,10 @@ class Predictor():
         #     model = model.to(self.device)
         #     self.models[key] = model
 
-    def predict(self, image_path, use_beam_search):
+    def predict(self, image_path,question, use_beam_search):
         """Run a single prediction on the model"""
-        print('Running a prediction with image path ' + str(image_path) + ' &  beam search set to ' + str(use_beam_search))
+        print('Running a VQA prediction with image path ' + str(image_path) + ' and Question '+str(question)
+              +' &  beam search set to ' + str(use_beam_search))
         image = io.imread(image_path)
         model = self.model
         pil_image = PIL.Image.fromarray(image)
@@ -612,16 +627,20 @@ class Predictor():
             prefix = self.clip_model.encode_image(image).to(
                 self.device, dtype=torch.float32
             )
+
             prefix_embed = model.clip_project(prefix).reshape(1, self.prefix_length, -1)
         if use_beam_search:
             return generate_beam(model, self.tokenizer, embed=prefix_embed)[0]
         else:
-            return generate2(model, self.tokenizer, embed=prefix_embed)
+            return generate2(model, self.tokenizer,question = question, embed=prefix_embed)
 
 
 if __name__ == '__main__':
     print('hello from my predict.py !!')
-    mypredictor = Predictor(weights_path='checkpoints/coco_prefix-009_iarai.pt')
+    mypredictor = Predictor(weights_path='checkpoints/coco_prefix-014_iarai_vqa.pt')
+
+
+
     # Images/COCO_val2014_000000060623.jpg
     # Images/COCO_val2014_000000165547.jpg
     # Images/COCO_val2014_000000354533.jpg
@@ -632,6 +651,6 @@ if __name__ == '__main__':
     # Images/CONCEPTUAL_02.jpg
     # Images/CONCEPTUAL_04.jpg
 
-    temp_img = 'Images/CONCEPTUAL_04.jpg'
-    output = mypredictor.predict(image_path=temp_img, use_beam_search=False)
+    temp_img = 'Images/COCO_val2014_000000354533.jpg'
+    output = mypredictor.predict(image_path=temp_img,question='Is the bike in motion?', use_beam_search=False)
     print(output)

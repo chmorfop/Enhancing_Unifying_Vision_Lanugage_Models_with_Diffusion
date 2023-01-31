@@ -31,7 +31,7 @@ class ClipCocoDataset(Dataset):
         temp_q = self.questions[item]
         tokenized_answer =  torch.tensor(self.tokenizer.encode(temp_ans) , dtype=torch.int64)
         q_range = len(self.tokenizer.encode(temp_q))
-        a_range = len(self.tokenizer.encode(temp_ans))
+        a_range = len(self.tokenizer.encode(temp_ans)) + 1
         rest_range = self.max_seq_len - q_range - a_range
         if rest_range>=0:
             need_pred = q_range*[0] + a_range*[1] + rest_range*[0]
@@ -87,11 +87,12 @@ class ClipCocoDataset(Dataset):
         self.captions_tokens = []
         self.caption2embedding = []
         # self.temp_answers_tens = []
+        eos = self.tokenizer.eos_token_id
         max_seq_len = 0
         max_ans_len = 0
         for i,caption in enumerate(captions_raw):
             # tokenize to caption
-            self.captions_tokens.append(torch.tensor(self.tokenizer.encode(caption['question']+' '+caption['answer']) , dtype=torch.int64))
+            self.captions_tokens.append(torch.tensor(self.tokenizer.encode(caption['question']+' '+caption['answer'] )+ [eos] , dtype=torch.int64))
             # clip_embedding einai to sequential ID !!
             self.caption2embedding.append(caption["clip_embedding"])
             max_seq_len = max(max_seq_len, self.captions_tokens[-1].shape[0])
@@ -349,9 +350,11 @@ def train(dataset: ClipCocoDataset, model: ClipCaptionModel, args,
           lr: float = 2e-5, warmup_steps: int = 5000, output_dir: str = ".", output_prefix: str = ""):
 
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-    batch_size = args.bs
-    epochs = args.epochs
-    # test_tokenizer = GPT2Tokenizer.from_pretrained('gpt2')
+    # batch_size = args.bs
+    # epochs = args.epochs
+    batch_size = 8
+    epochs = 2
+    #test_tokenizer = GPT2Tokenizer.from_pretrained('gpt2')
     if not os.path.exists(output_dir):
         os.makedirs(output_dir)
     model = model.to(device)
@@ -430,13 +433,20 @@ def main():
     args = parser.parse_args()
     print('args **** ' + str(args))
     print()
-    prefix_length = args.prefix_length
     # for ViT B 512 , ViT L 768, RESNET 640?
     prefix_dim = 640 if args.is_rn else 512
-    # args.data = './data/coco/oscar_split_ViT-B_32_trainy_vqa.pkl'
+    args.data = './data/coco/oscar_split_ViT-B_32_trainy_vqa.pkl'
+    args.mapping_type = 'transformer'
+    args.out_dir = 'outputdir'
+    args.num_layers = 8
+    # prefix_length = args.prefix_length
+    prefix_length = 10
+
+
+
+
     dataset = ClipCocoDataset(args.data, prefix_length, normalize_prefix=args.normalize_prefix)
     args.mapping_type = {'mlp': MappingType.MLP, 'transformer': MappingType.Transformer}[args.mapping_type]
-
 
     args.only_prefix = True
     if args.only_prefix:

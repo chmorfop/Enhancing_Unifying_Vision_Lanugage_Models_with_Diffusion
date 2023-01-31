@@ -11,6 +11,20 @@
     #     break
 
 
+    with open(args.data, 'rb') as f:
+        all_data = pickle.load(f)
+
+    print()
+    counter = 0
+    for a in all_data['captions']:
+        print(a['answer'])
+        counter = counter + 1
+        if counter == 100:
+            break
+
+
+
+
     #train_dataloader = DataLoader(dataset, batch_size=1, drop_last=True)
     #for idx, d in enumerate(train_dataloader):
         #temp = idx

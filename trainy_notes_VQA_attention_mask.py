@@ -10,6 +10,7 @@ import pickle
 import sys
 import argparse
 import json
+import numpy as np
 from typing import Tuple, Optional, Union
 import matplotlib.pyplot as plt
 
@@ -37,7 +38,8 @@ class ClipCocoDataset(Dataset):
             need_pred = q_range*[0] + a_range*[1] + rest_range*[0]
             need_pred_4gpt = q_range*[1] + a_range*[1] + rest_range*[0]
         elif rest_range<0:
-            print('SOOS')
+            # TODO
+            #print('SOOS')
             need_pred = self.max_seq_len*[0]
             need_pred_4gpt = self.max_seq_len*[0]
 
@@ -226,7 +228,7 @@ class Transformer(nn.Module):
     def __init__(self, dim_self: int, num_heads: int, num_layers: int, dim_ref: Optional[int] = None,
                  mlp_ratio: float = 2., act=nnf.relu, norm_layer: nn.Module = nn.LayerNorm, enc_dec: bool = False):
         super(Transformer, self).__init__()
-        print('Initiate Transformer *** with 8 Transformer layers ! ')
+        print('*** Initiate Transformer with {} Layers *** '.format(num_layers))
         dim_ref = dim_ref if dim_ref is not None else dim_self
         self.enc_dec = enc_dec
         if enc_dec:
@@ -356,8 +358,8 @@ def train(dataset: ClipCocoDataset, model: ClipCaptionModel, args,
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     # batch_size = args.bs
     # epochs = args.epochs
-    batch_size = 1
-    epochs = 2
+    batch_size = 32
+    epochs = 3
     test_tokenizer = GPT2Tokenizer.from_pretrained('gpt2')
     if not os.path.exists(output_dir):
         os.makedirs(output_dir)
@@ -368,53 +370,53 @@ def train(dataset: ClipCocoDataset, model: ClipCaptionModel, args,
     scheduler = get_linear_schedule_with_warmup(
         optimizer, num_warmup_steps=warmup_steps, num_training_steps=epochs * len(train_dataloader)
     )
-    epoch_train_loss = []
+    epoch_avg_train_loss = []
+    print('*** Initiate Training Phase *** ')
+    print()
     for epoch in range(epochs):
-        print(f">>> Training epoch {epoch}")
         sys.stdout.flush()
-        progress = tqdm(total=len(train_dataloader), desc=output_prefix)
-        sum_train_loss = 0
+        progress = tqdm(train_dataloader, total=len(train_dataloader), desc='Epoch [{}/{}]'.format(epoch,epochs))
+        train_loss = []
         for idx, (tokens, mask, mask4gpt, prefix) in enumerate(train_dataloader):
 
             temp = 'checkpoint'
             model.zero_grad()
             tokens, mask, mask4gpt, prefix = tokens.to(device), mask.to(device), mask4gpt.to(device), prefix.to(device, dtype=torch.float32)
 
-            outputs = model(tokens, prefix, mask)
+            outputs = model(tokens, prefix, mask4gpt)
             logits = outputs.logits[:, dataset.prefix_length - 1: -1]
             new_mask = mask[:,10:]
             bool_mask = new_mask.ge(1).view(-1)
             final_logits = logits.reshape(-1, logits.shape[-1])
             finally_tok = tokens.view(-1)
 
-            new_final_logits = final_logits[bool_mask]
-            finally_toky = finally_tok[bool_mask]
-
-            loss = nnf.cross_entropy(new_final_logits,finally_toky, ignore_index=0)
-            sum_train_loss = sum_train_loss + loss.item()
+            loss = nnf.cross_entropy(final_logits[bool_mask],finally_tok[bool_mask], ignore_index=0)
+            train_loss.append(loss.item())
             loss.backward()
             optimizer.step()
             scheduler.step()
             optimizer.zero_grad()
-            progress.set_postfix({"loss": loss.item()})
+            progress.set_postfix({"Batch Train Loss": loss.item()})
             progress.update()
 
-        epoch_train_loss.append(sum_train_loss)
+        epoch_avg_train_loss.append(np.mean(train_loss))
         progress.close()
         if epoch % args.save_every == 0 or epoch == epochs - 1:
             torch.save(
                 model.state_dict(),
                 os.path.join(output_dir, f"{output_prefix}-{epoch:03d}.pt"),
             )
-
-    print(epoch_train_loss)
-    # fig, axes = plt.subplots(1, figsize=(15, 15))
-    # plt.plot(epochs, epoch_train_loss, color='b', linestyle='-', label='Training loss')
-    # plt.title('Training Loss & Epochs', fontsize=16)
-    # plt.xlabel('Epochs', fontsize=16)
-    # plt.ylabel('Loss', fontsize=16)
-    # plt.legend()
-    # plt.savefig('./epoch_train_loss')
+    print(epochs)
+    print(epoch_avg_train_loss)
+    print(len(epochs))
+    print(len(epoch_avg_train_loss))
+    fig, axes = plt.subplots(1, figsize=(15, 15))
+    plt.plot(epochs, epoch_avg_train_loss, color='b', linestyle='-', label='Training loss')
+    plt.title('Training Loss & Epochs', fontsize=16)
+    plt.xlabel('Epochs', fontsize=16)
+    plt.ylabel('Loss', fontsize=16)
+    plt.legend()
+    plt.savefig('./epoch_train_loss.png')
 
     return model
 
@@ -435,23 +437,20 @@ def main():
     parser.add_argument('--is_rn', dest='is_rn', action='store_true')
     parser.add_argument('--normalize_prefix', dest='normalize_prefix', action='store_true')
     args = parser.parse_args()
-    print('args **** ' + str(args))
-    print()
+    print('Logging args **** ' + str(args))
     # for ViT B 512 , ViT L 768, RESNET 640?
     prefix_dim = 640 if args.is_rn else 512
-    args.data = './data/coco/oscar_split_ViT-B_32_trainy_vqa_1024.pkl'
+    # args.data = './data/coco/oscar_split_ViT-B_32_trainy_vqa_1024.pkl'
+    args.data = '/content/drive/MyDrive/Colab Notebooks/test_data/oscar_split_ViT-B_32_trainy_vqa.pkl'
     args.mapping_type = 'transformer'
     args.out_dir = 'outputdir'
     args.num_layers = 8
     # prefix_length = args.prefix_length
     prefix_length = 10
 
-
-
-
     dataset = ClipCocoDataset(args.data, prefix_length, normalize_prefix=args.normalize_prefix)
     args.mapping_type = {'mlp': MappingType.MLP, 'transformer': MappingType.Transformer}[args.mapping_type]
-
+    print()
     args.only_prefix = True
     if args.only_prefix:
         # 10 - 10 - 512 (fixed) - #layers 8 - transformer

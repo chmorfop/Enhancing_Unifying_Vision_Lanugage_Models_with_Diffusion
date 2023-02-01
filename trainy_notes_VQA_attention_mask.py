@@ -359,7 +359,7 @@ def train(dataset: ClipCocoDataset, model: ClipCaptionModel, args,
     # batch_size = args.bs
     # epochs = args.epochs
     batch_size = 32
-    epochs = 3
+    epochs = 2
     test_tokenizer = GPT2Tokenizer.from_pretrained('gpt2')
     if not os.path.exists(output_dir):
         os.makedirs(output_dir)
@@ -375,7 +375,7 @@ def train(dataset: ClipCocoDataset, model: ClipCaptionModel, args,
     print()
     for epoch in range(epochs):
         sys.stdout.flush()
-        progress = tqdm(train_dataloader, total=len(train_dataloader), desc='Epoch [{}/{}]'.format(epoch,epochs))
+        progress = tqdm(train_dataloader, total=len(train_dataloader), desc='Epoch [{}/{}]'.format(epoch,epochs-1))
         train_loss = []
         for idx, (tokens, mask, mask4gpt, prefix) in enumerate(train_dataloader):
 
@@ -406,12 +406,10 @@ def train(dataset: ClipCocoDataset, model: ClipCaptionModel, args,
                 model.state_dict(),
                 os.path.join(output_dir, f"{output_prefix}-{epoch:03d}.pt"),
             )
-    print(epochs)
-    print(epoch_avg_train_loss)
-    print(len(epochs))
-    print(len(epoch_avg_train_loss))
+
+
     fig, axes = plt.subplots(1, figsize=(15, 15))
-    plt.plot(epochs, epoch_avg_train_loss, color='b', linestyle='-', label='Training loss')
+    plt.plot([e for e in range(epochs)], epoch_avg_train_loss, color='b', linestyle='-', label='Training loss')
     plt.title('Training Loss & Epochs', fontsize=16)
     plt.xlabel('Epochs', fontsize=16)
     plt.ylabel('Loss', fontsize=16)
@@ -441,7 +439,7 @@ def main():
     # for ViT B 512 , ViT L 768, RESNET 640?
     prefix_dim = 640 if args.is_rn else 512
     # args.data = './data/coco/oscar_split_ViT-B_32_trainy_vqa_1024.pkl'
-    args.data = '/content/drive/MyDrive/Colab Notebooks/test_data/oscar_split_ViT-B_32_trainy_vqa.pkl'
+    args.data = '/content/drive/MyDrive/Colab Notebooks/test_data/oscar_split_ViT-B_32_trainy_vqa_1024.pkl'
     args.mapping_type = 'transformer'
     args.out_dir = 'outputdir'
     args.num_layers = 8

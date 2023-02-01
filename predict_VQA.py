@@ -200,7 +200,7 @@ class Transformer(nn.Module):
     def __init__(self, dim_self: int, num_heads: int, num_layers: int, dim_ref: Optional[int] = None,
                  mlp_ratio: float = 2., act=nnf.relu, norm_layer: nn.Module = nn.LayerNorm, enc_dec: bool = False):
         super(Transformer, self).__init__()
-        print('Initiate Transformer *** with 8 Transformer layers ! ')
+        print('Initiate Transformer with 8 layers ***')
         dim_ref = dim_ref if dim_ref is not None else dim_self
         self.enc_dec = enc_dec
         if enc_dec:
@@ -272,7 +272,6 @@ class ClipCaptionModel(nn.Module):
         self.prefix_length = prefix_length
         self.gpt = GPT2LMHeadModel.from_pretrained('gpt2')
         self.gpt_embedding_size = self.gpt.transformer.wte.weight.shape[1]
-        print('gpt_embedding_size   --> '+ str(self.gpt_embedding_size))
         if mapping_type == MappingType.MLP:
             self.clip_project = MLP((prefix_size, (self.gpt_embedding_size * prefix_length) // 2,
                                      self.gpt_embedding_size * prefix_length))
@@ -524,15 +523,15 @@ def generate2(
     generated_list = []
     # allo token index for . kai allo for EOS // tokenizer.eos_token_id
     stop_token_index = tokenizer.encode(stop_token)[0]
+    eos_token_index = tokenizer.eos_token_id
     filter_value = -float("Inf")
-    device = next(model.parameters()).device
 
     with torch.no_grad():
 
         for entry_idx in range(entry_count):
             if embed is not None:
                 #generated = embed
-                tok_q = torch.tensor(tokenizer.encode(question))
+                tok_q = torch.tensor(tokenizer.encode(question)).to()
                 embedding_text = model.gpt.transformer.wte(tok_q).unsqueeze(0)
                 generated = torch.cat((embed, embedding_text), dim=1)
 
@@ -576,11 +575,11 @@ def generate2(
                 else:
                     tokens = torch.cat((tokens, next_token), dim=1)
                 generated = torch.cat((generated, next_token_embed), dim=1)
-                if stop_token_index == next_token.item():
+                if (stop_token_index == next_token.item() ) or eos_token_index == next_token.item() :
                     break
 
             output_list = list(tokens.squeeze().cpu().numpy())
-            output_text = tokenizer.decode(output_list)
+            output_text = tokenizer.decode(output_list,skip_special_tokens=True)
             generated_list.append(output_text)
 
     return generated_list[0]
@@ -636,8 +635,7 @@ class Predictor():
 
 
 if __name__ == '__main__':
-    print('hello from my predict.py !!')
-    mypredictor = Predictor(weights_path='checkpoints/coco_prefix-014_iarai_vqa.pt')
+    mypredictor = Predictor(weights_path='checkpoints/coco_prefix-002_colab_vqa.pt')
 
 
 
@@ -651,6 +649,6 @@ if __name__ == '__main__':
     # Images/CONCEPTUAL_02.jpg
     # Images/CONCEPTUAL_04.jpg
 
-    temp_img = 'Images/COCO_val2014_000000354533.jpg'
-    output = mypredictor.predict(image_path=temp_img,question='Is the bike in motion?', use_beam_search=False)
+    temp_img = 'Images/COCO_val2014_000000060623.jpg'
+    output = mypredictor.predict(image_path=temp_img,question='What is she doing?', use_beam_search=False)
     print(output)

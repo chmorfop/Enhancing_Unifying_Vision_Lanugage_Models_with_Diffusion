@@ -8,67 +8,61 @@ import os
 from tqdm import tqdm
 import argparse
 
-# with open('./data/VQA/val_data.json', 'r') as f:
-#     data = json.load(f)
-#
-# #print(data)
-#
-# for i in tqdm(range(len(data))):
-#     d = data[i]
-#     img_id = d["image_id"]
-#     print(img_id)
-#     print(d)
-#     filename = f"./data/coco/val2014/COCO_val2014_{int(img_id):012d}.jpg"
-#     # print('Numder i  : ' + str(i))
-#     # print('img_id  '+ str(img_id))
-#     print()
-#     image = io.imread(filename)
-#     print(image.shape)
-#     print(d['question'])
-#     print(d['answer'])
-#     break
 
 def main(clip_model_type: str):
-    #device = torch.device('cuda:0')
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-    print(device)
+    print('device : {}'.format(device))
     clip_model_name = clip_model_type.replace('/', '_')
-    out_path = f"./data/coco/oscar_split_{clip_model_name}_trainy_vqa.pkl"
+    out_path = f".data/coco/clip_feat_{clip_model_name}_train_vqa.pkl"
     clip_model, preprocess = clip.load(clip_model_type, device=device, jit=False)
-    with open('./data/VQA/val_data.json', 'r') as f:
-        data = json.load(f)
-    print("%0d captions loaded from json " % len(data))
+    annotation_path = '/content/drive/MyDrive/Colab Notebooks/COCO/Annotations/VQA_train2014_annotations.json'
+    question_path = '/content/drive/MyDrive/Colab Notebooks/COCO/Annotations/VQA_train2014_questions.json'
+
+    with open(annotation_path, 'r') as f:
+        ann = json.load(f).get('annotations')
+
+    with open(question_path, 'r') as f:
+        questions = json.load(f).get('questions')
+
+    print("# %0d QAs loaded from json " % len(ann))
     all_embeddings = []
     all_captions = []
     all_questions = []
     counter = 0
-    for i in tqdm(range(len(data))):
-        d = data[i]
-        img_id = d["image_id"]
+    for i in tqdm(range(len(ann))):
+        temp_ann_question_id = ann[i].get('question_id')
+        temp_q_question_id = questions[i].get('question_id')
+        temp_ann_img_id = ann[i].get('image_id')
+        temp_q_img_id = questions[i].get('image_id')
+        if (temp_ann_question_id != temp_q_question_id) and (temp_ann_img_id != temp_q_img_id):
+            raise
+        temp_question = questions[i]
+        temp_ann = ann[i]
+        img_id = temp_ann["image_id"]
+        # todo
         filename = f"./data/coco/val2014/COCO_val2014_{int(img_id):012d}.jpg"
-        # print('Numder i  : ' + str(i))
-        # print('img_id  '+ str(img_id))
-        # print(d)
-        print()
-        image = io.imread(filename)
+        try:
+            image = io.imread(filename)
+        except Exception as e:
+            print(i, img_id)
+            print(e)
+            raise
         image = preprocess(Image.fromarray(image)).unsqueeze(0).to(device)
         with torch.no_grad():
             prefix = clip_model.encode_image(image).cpu()
-        d["clip_embedding"] = i
+
+        temp_dict = {'question': temp_question.get('question'),
+                     'answer': temp_ann.get('multiple_choice_answer'),
+                     'clip_embedding': i,
+                     'image_id': temp_ann.get('image_id'),
+                     }
         all_embeddings.append(prefix)
-        all_captions.append(d)
-        if counter == 1024:
-            break
-        counter = counter + 1
-        if (i + 1) % 10000 == 0:
-            with open(out_path, 'wb') as f:
-                pickle.dump({"clip_embedding": torch.cat(all_embeddings, dim=0), "captions": all_captions }, f)
+        all_captions.append(temp_dict)
 
     with open(out_path, 'wb') as f:
         pickle.dump({"clip_embedding": torch.cat(all_embeddings, dim=0), "captions": all_captions}, f)
 
-    print('Done')
-    print("%0d embeddings saved " % len(all_embeddings))
+    print("%0d embeddings saved." % len(all_embeddings))
     return 0
 
 

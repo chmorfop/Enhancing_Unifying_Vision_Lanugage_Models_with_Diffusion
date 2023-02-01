@@ -22,7 +22,9 @@
         if counter == 100:
             break
 
-
+# EXAMPLE
+# {'image_id': 131557, 'question': 'What are the sources of protein on this pizza?', 'answer': 'cheese', 'caption': 'A close up of a pizza pie on a plate.', 'clip_embedding': 1024}
+# {'image_id': 260409, 'id': 24152, 'caption': 'A person posing next to their motorcycle by the shore.', 'clip_embedding': 1021}
 
 
     #train_dataloader = DataLoader(dataset, batch_size=1, drop_last=True)

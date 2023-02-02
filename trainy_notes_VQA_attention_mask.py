@@ -13,6 +13,7 @@ import json
 import numpy as np
 from typing import Tuple, Optional, Union
 import matplotlib.pyplot as plt
+import copy
 
 
 class MappingType(Enum):
@@ -105,16 +106,10 @@ class ClipCocoDataset(Dataset):
             max_seq_len = max(max_seq_len, self.captions_tokens[-1].shape[0])
 
             temp = torch.tensor(self.tokenizer.encode(caption['answer']), dtype=torch.int64)
-            # self.temp_answers_tens.append(temp)
             max_ans_len = max(max_ans_len, temp.shape[0])
-        with open(f"{data_path[:-4]}_tokens.pkl", 'wb') as f:
-            pickle.dump([self.captions_tokens, self.caption2embedding, self.answers, self.questions, max_seq_len], f)
-        # all_len = torch.tensor([len(self.temp_answers_tens[i]) for i in range(len(self))]).float()
-        # self.max_seq_len = min(int(all_len.mean() + all_len.std() * 10), int(all_len.max()))
 
         all_len = torch.tensor([len(self.captions_tokens[i]) for i in range(len(self))]).float()
         self.max_seq_len = min(int(all_len.mean() + all_len.std() * 10), int(all_len.max()))
-        # self.max_seq_len = max_seq_len
         self.max_ans_len = max_ans_len
         print('max_seq_len of whole tokens :  ' + str(self.max_seq_len))
         print('max_ans_len of answers :  ' + str(self.max_ans_len))
@@ -353,44 +348,88 @@ def load_model(config_path: str, epoch_or_latest: Union[str, int] = '_latest'):
     return model, parser
 
 
-def train(dataset: ClipCocoDataset, model: ClipCaptionModel, myconfig,
-          lr: float = 2e-5, warmup_steps: int = 5000, output_dir: str = ".", model_name: str = ""):
+def apply_validation(model, val_dataloader, epoch, prefix_length):
+    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+    val_loss = 0
+    model.eval()
+    for idx, (tokens, mask, mask4gpt, prefix) in enumerate(val_dataloader):
+        tokens, mask, mask4gpt, prefix = tokens.to(device), mask.to(device), mask4gpt.to(device), prefix.to(device,
+                                                                                                            dtype=torch.float32)
+        with torch.no_grad():
+            outputs = model(tokens, prefix, mask4gpt)
+            logits = outputs.logits[:, prefix_length - 1: -1]
+            new_mask = mask[:, 10:]
+            bool_mask = new_mask.ge(1).view(-1)
+            final_logits = logits.reshape(-1, logits.shape[-1])
+            finally_tok = tokens.view(-1)
+            loss = nnf.cross_entropy(final_logits[bool_mask], finally_tok[bool_mask], ignore_index=0)
+            val_loss = val_loss + loss.item()
+
+    avg_val_loss = val_loss / len(val_dataloader)
+    print('*** In Epoch {} the average validation loss : {} ***'.format(epoch, avg_val_loss))
+    return avg_val_loss
+
+
+class EarlyStopping:
+    def __init__(self, tolerance=5, delta=0.5):
+
+        self.tolerance = tolerance
+        self.delta = delta
+        self.counter = 0
+        self.early_stop = False
+
+    def __call__(self, train_loss, validation_loss):
+        if (validation_loss - train_loss) > self.delta:
+            self.counter += 1
+            if self.counter >= self.tolerance:
+                self.early_stop = True
+
+def train(model: ClipCaptionModel, train_dataset: ClipCocoDataset,
+          val_dataset: ClipCocoDataset, myconfig,lr: float = 2e-5,
+          warmup_steps: int = 5000, output_dir: str = ".", model_name: str = ""):
+
 
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     # test_tokenizer = GPT2Tokenizer.from_pretrained('gpt2')
     if not os.path.exists(output_dir):
         os.makedirs(output_dir)
+
     model = model.to(device)
-    model.train()
     optimizer = AdamW(model.parameters(), lr=lr)
     batch_size = myconfig.get('batch_size')
     epochs = myconfig.get('epochs')
 
-    train_dataloader = DataLoader(dataset, batch_size=batch_size, shuffle=False, drop_last=False)
+    train_dataloader = DataLoader(train_dataset, batch_size=batch_size, shuffle=False, drop_last=False)
+    val_dataloader = DataLoader(val_dataset, batch_size=batch_size, shuffle=False, drop_last=False)
+
+    earlystop = EarlyStopping(tolerance=5,delta=0.5)
     scheduler = get_linear_schedule_with_warmup(
         optimizer, num_warmup_steps=warmup_steps, num_training_steps=epochs * len(train_dataloader)
     )
-    epoch_avg_train_loss = []
+    avg_train_loss = []
+    avg_val_loss = []
+    max_val_loss = float('+inf')
+
     print('*** Initiate Training Phase *** ')
     print()
     for epoch in range(epochs):
-        sys.stdout.flush()
         progress = tqdm(train_dataloader, total=len(train_dataloader), desc='Epoch [{}/{}]'.format(epoch, epochs - 1))
-        train_loss = []
+        train_loss = 0
         for idx, (tokens, mask, mask4gpt, prefix) in enumerate(train_dataloader):
+            model.train()
             model.zero_grad()
             tokens, mask, mask4gpt, prefix = tokens.to(device), mask.to(device), mask4gpt.to(device), prefix.to(device,
                                                                                                                 dtype=torch.float32)
 
             outputs = model(tokens, prefix, mask4gpt)
-            logits = outputs.logits[:, dataset.prefix_length - 1: -1]
+            logits = outputs.logits[:, train_dataset.prefix_length - 1: -1]
             new_mask = mask[:, 10:]
             bool_mask = new_mask.ge(1).view(-1)
             final_logits = logits.reshape(-1, logits.shape[-1])
             finally_tok = tokens.view(-1)
 
             loss = nnf.cross_entropy(final_logits[bool_mask], finally_tok[bool_mask], ignore_index=0)
-            train_loss.append(loss.item())
+            train_loss = train_loss + loss.item()
             loss.backward()
             optimizer.step()
             scheduler.step()
@@ -398,21 +437,41 @@ def train(dataset: ClipCocoDataset, model: ClipCaptionModel, myconfig,
             progress.set_postfix({"Batch Train Loss": loss.item()})
             progress.update()
 
-        epoch_avg_train_loss.append(np.mean(train_loss))
         progress.close()
+
+        epoch_avg_train_loss = train_loss / len(train_dataloader)
+        avg_train_loss.append(epoch_avg_train_loss)
+        epoch_avg_val_loss = apply_validation(model, val_dataloader, epoch, prefix_length=val_dataset.prefix_length)
+        avg_val_loss.append(epoch_avg_val_loss)
+
+        earlystop(epoch_avg_train_loss,epoch_avg_val_loss)
+        if earlystop.early_stop:
+            print('*** Exit Training due to Early Stopping ( at Epoch {} ) ***'.format(epoch))
+            break
+
+        if epoch_avg_val_loss < max_val_loss:
+            best_model = copy.deepcopy(model)
+            max_val_loss = epoch_avg_val_loss
+
+            torch.save(best_model.state_dict(), os.path.join(output_dir, f"{model_name}_bestmodel.pt"))
+            print(f'Best Validation loss  : {epoch_avg_val_loss}')
+
         if epoch % myconfig.get('save_every') == 0 or epoch == epochs - 1:
             torch.save(
                 model.state_dict(),
                 os.path.join(output_dir, f"{model_name}-{epoch:03d}.pt"),
             )
 
+
+
     fig, axes = plt.subplots(1, figsize=(15, 15))
-    plt.plot([e for e in range(epochs)], epoch_avg_train_loss, color='b', linestyle='-', label='Training loss')
+    plt.plot([e for e in range(epochs)], avg_train_loss, color='b', linestyle='-', label='Training loss')
+    plt.plot([e for e in range(epochs)], avg_val_loss, color='r', linestyle='--', label='Validation loss')
     plt.title('Training Loss & Epochs', fontsize=16)
     plt.xlabel('Epochs', fontsize=16)
     plt.ylabel('Loss', fontsize=16)
     plt.legend()
-    plt.savefig('./train_loss_{}.png'.format(myconfig.get('model_name')))
+    plt.savefig('./train_val_loss_{}.png'.format(myconfig.get('model_name')))
     return model
 
 
@@ -422,9 +481,10 @@ def main():
         'batch_size': 32,
         # './data/coco/oscar_split_ViT-B_32_trainy_vqa_1024.pkl'
         # '/content/drive/MyDrive/Colab Notebooks/test_data/oscar_split_ViT-B_32_trainy_vqa_1024.pkl'
-        'data': './data/coco/oscar_split_ViT-B_32_trainy.pkl',
+        'train_data': './data/coco/oscar_split_ViT-B_32_train.pkl',
+        'val_data': './data/coco/oscar_split_ViT-B_32_val.pkl',
         'out_dir': './outputdir',
-        'prefix': 'coco_prefix',
+        # 'prefix': 'coco_prefix',
         'save_every': 1,
         'prefix_length': 10,
         'prefix_length_clip': 10,
@@ -432,23 +492,25 @@ def main():
         'mapping_type': 'transformer',
         'num_layers': 8,
         'is_rn': False,
-        'normalize_prefix': False ,
+        'normalize_prefix': False,
         'model_name': 'my_coco_vqa_model'
-
 
     }
     print('Logging args **** ' + str(myconfig))
     prefix_dim = 640 if myconfig.get('is_rn') else 512
     print()
-    dataset = ClipCocoDataset(myconfig.get('data'), myconfig.get('prefix_length'),
-                              normalize_prefix=myconfig.get('normalize_prefix'))
+    train_dataset = ClipCocoDataset(myconfig.get('train_data'), myconfig.get('prefix_length'),
+                                    normalize_prefix=myconfig.get('normalize_prefix'))
+    val_dataset = ClipCocoDataset(myconfig.get('train_data'), myconfig.get('prefix_length'),
+                                  normalize_prefix=myconfig.get('normalize_prefix'))
     mapping_type = {'mlp': MappingType.MLP, 'transformer': MappingType.Transformer}[myconfig.get('mapping_type')]
     print()
     # TODO CHECK DIFFERENCE prefix_length - prefix_length_clip
     model = ClipCaptionPrefix(myconfig.get('prefix_length'), clip_length=myconfig.get('prefix_length_clip'),
                               prefix_size=prefix_dim, num_layers=myconfig.get('num_layers'),
                               mapping_type=mapping_type)
-    train(dataset, model, myconfig, output_dir=myconfig.get('out_dir'), model_name=myconfig.get('prefix'))
+    train(model, train_dataset, val_dataset, myconfig, output_dir=myconfig.get('out_dir'),
+          model_name=myconfig.get('model_name'))
 
 
 if __name__ == '__main__':

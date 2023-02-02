@@ -22,6 +22,20 @@
         if counter == 100:
             break
 
+
+    with torch.no_grad():
+        for d in tqdm(data_loader):
+            input_ids = d["input_ids"].to(device)
+            attention_mask = d["attention_mask"].to(device)
+            targets = d["labels"].to(device)
+            outputs = model(input_ids=input_ids,attention_mask=attention_mask)
+            _, preds = torch.max(outputs, dim=1)
+            loss = loss_fn(outputs, targets)
+            correct_predictions += torch.sum(preds == targets)
+            losses.append(loss.item())
+        return correct_predictions.double() / n_examples, np.mean(losses)
+
+
 # EXAMPLE
 # {'image_id': 131557, 'question': 'What are the sources of protein on this pizza?', 'answer': 'cheese', 'caption': 'A close up of a pizza pie on a plate.', 'clip_embedding': 1024}
 # {'image_id': 260409, 'id': 24152, 'caption': 'A person posing next to their motorcycle by the shore.', 'clip_embedding': 1021}

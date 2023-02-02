@@ -479,12 +479,12 @@ def train(model: ClipCaptionModel, train_dataset: ClipCocoDataset,
 
 def main():
     myconfig = {
-        'epochs': 2,
+        'epochs': 1,
         'batch_size': 32,
         # './data/coco/oscar_split_ViT-B_32_trainy_vqa_1024.pkl'
         # '/content/drive/MyDrive/Colab Notebooks/test_data/oscar_split_ViT-B_32_trainy_vqa_1024.pkl'
-        'train_data': './data/coco/oscar_split_ViT-B_32_train.pkl',
-        'val_data': './data/coco/oscar_split_ViT-B_32_val.pkl',
+        'train_data': '/content/clipcap/data/coco/clip_feat_ViT-B_32_train_vqa.pkl',
+        'val_data': '/content/clipcap/data/coco/clip_feat_ViT-B_32_val_vqa.pkl',
         'out_dir': './outputdir',
         # 'prefix': 'coco_prefix',
         'save_every': 1,
@@ -503,7 +503,7 @@ def main():
     print()
     train_dataset = ClipCocoDataset(myconfig.get('train_data'), myconfig.get('prefix_length'),
                                     normalize_prefix=myconfig.get('normalize_prefix'))
-    val_dataset = ClipCocoDataset(myconfig.get('train_data'), myconfig.get('prefix_length'),
+    val_dataset = ClipCocoDataset(myconfig.get('val_data'), myconfig.get('prefix_length'),
                                   normalize_prefix=myconfig.get('normalize_prefix'))
     mapping_type = {'mlp': MappingType.MLP, 'transformer': MappingType.Transformer}[myconfig.get('mapping_type')]
     print()

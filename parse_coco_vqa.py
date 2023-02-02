@@ -13,7 +13,7 @@ def main(clip_model_type: str):
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     print('device : {}'.format(device))
     clip_model_name = clip_model_type.replace('/', '_')
-    out_path = f".data/coco/clip_feat_{clip_model_name}_train_vqa.pkl"
+    out_path = f"/content/clipcap/data/coco/clip_feat_{clip_model_name}_train_vqa.pkl"
     clip_model, preprocess = clip.load(clip_model_type, device=device, jit=False)
     annotation_path = '/content/drive/MyDrive/Colab Notebooks/COCO/Annotations/VQA_train2014_annotations.json'
     question_path = '/content/drive/MyDrive/Colab Notebooks/COCO/Annotations/VQA_train2014_questions.json'
@@ -39,10 +39,10 @@ def main(clip_model_type: str):
         temp_question = questions[i]
         temp_ann = ann[i]
         img_id = temp_ann["image_id"]
-        # todo
-        filename = f"./data/coco/val2014/COCO_val2014_{int(img_id):012d}.jpg"
+        prepath = "/content/output"
+        filename = f"/train2014/COCO_train2014_{int(img_id):012d}.jpg"
         try:
-            image = io.imread(filename)
+            image = io.imread(prepath+filename)
         except Exception as e:
             print(i, img_id)
             print(e)

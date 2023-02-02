@@ -441,6 +441,8 @@ def train(model: ClipCaptionModel, train_dataset: ClipCocoDataset,
 
         epoch_avg_train_loss = train_loss / len(train_dataloader)
         avg_train_loss.append(epoch_avg_train_loss)
+        print('*** In Epoch {} the average train loss : {} ***'.format(epoch, epoch_avg_train_loss))
+
         epoch_avg_val_loss = apply_validation(model, val_dataloader, epoch, prefix_length=val_dataset.prefix_length)
         avg_val_loss.append(epoch_avg_val_loss)
 

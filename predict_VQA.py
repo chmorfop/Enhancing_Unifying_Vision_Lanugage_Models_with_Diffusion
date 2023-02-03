@@ -370,64 +370,6 @@ def train(dataset: ClipCocoDataset, model: ClipCaptionModel, args,
     return model
 
 
-# def main():
-#     parser = argparse.ArgumentParser()
-#     parser.add_argument('--data', default='./data/coco/oscar_split_ViT-B_32_trainy.pkl')
-#     parser.add_argument('--out_dir', default='./checkpoints')
-#     parser.add_argument('--prefix', default='coco_prefix', help='prefix for saved filenames')
-#     parser.add_argument('--epochs', type=int, default=2)
-#     parser.add_argument('--save_every', type=int, default=1)
-#     parser.add_argument('--prefix_length', type=int, default=10)
-#     parser.add_argument('--prefix_length_clip', type=int, default=10)
-#     parser.add_argument('--bs', type=int, default=40)
-#     parser.add_argument('--only_prefix', dest='only_prefix', action='store_true')
-#     parser.add_argument('--mapping_type', type=str, default='transformer', help='mlp/transformer')
-#     parser.add_argument('--num_layers', type=int, default=8)
-#     parser.add_argument('--is_rn', dest='is_rn', action='store_true')
-#     parser.add_argument('--normalize_prefix', dest='normalize_prefix', action='store_true')
-#     args = parser.parse_args()
-#     print('args **** ' + str(args))
-#     print()
-#
-#
-#     # size of --> torch.Size([1025, 512])
-#     # test = all_data['clip_embedding']
-#
-#     prefix_length = args.prefix_length
-#     dataset = ClipCocoDataset(args.data, prefix_length, normalize_prefix=args.normalize_prefix)
-#     # for ViT B 512 , ViT L 768, RESNET 640?
-#
-#     prefix_dim = 640 if args.is_rn else 512
-#     args.mapping_type = {'mlp': MappingType.MLP, 'transformer': MappingType.Transformer}[args.mapping_type]
-#     print('args.mapping type  *** '+ str(args.mapping_type))
-#
-#     # for d in dataset:
-#     #     #print(type(d))
-#     #     print(d[0]) # caption tokens
-#     #     print(' '.join(GPT2Tokenizer.from_pretrained('gpt2').convert_ids_to_tokens(d[0])))
-#     #     print()
-#     #     print(d[1])  #maska
-#     #     print()
-#     #     print(d[2])
-#     #     print(d[2].size()) # 1 x 512  # clip embeddings
-#     #     print()
-#     #     break
-#
-#
-#     args.only_prefix = True
-#     if args.only_prefix:
-#         # 10 - 10 - 512 (fixed) - #layers 8 - transformer
-#         model = ClipCaptionPrefix(prefix_length, clip_length=args.prefix_length_clip, prefix_size=prefix_dim,
-#                                   num_layers=args.num_layers, mapping_type=args.mapping_type)
-#         print("Train only prefix")
-#     else:
-#         model = ClipCaptionModel(prefix_length, clip_length=args.prefix_length_clip, prefix_size=prefix_dim,
-#                                   num_layers=args.num_layers, mapping_type=args.mapping_type)
-#         print("Train both prefix and GPT")
-#         sys.stdout.flush()
-#     print(type(model))
-#     #print(model.clip_project)
-#     train(dataset, model, args, output_dir=args.out_dir, output_prefix=args.prefix)
 
 def generate_beam(
     model,
@@ -525,13 +467,14 @@ def generate2(
     stop_token_index = tokenizer.encode(stop_token)[0]
     eos_token_index = tokenizer.eos_token_id
     filter_value = -float("Inf")
+    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
     with torch.no_grad():
 
         for entry_idx in range(entry_count):
             if embed is not None:
                 #generated = embed
-                tok_q = torch.tensor(tokenizer.encode(question)).to()
+                tok_q = torch.tensor(tokenizer.encode(question)).to(device)
                 embedding_text = model.gpt.transformer.wte(tok_q).unsqueeze(0)
                 generated = torch.cat((embed, embedding_text), dim=1)
 
@@ -607,17 +550,13 @@ class Predictor():
         model = model.to(self.device)
         self.model = model
 
-        # for key, weights_path in WEIGHTS_PATHS.items():
-        #     model = ClipCaptionModel(self.prefix_length)
-        #     model.load_state_dict(torch.load(weights_path, map_location=CPU))
-        #     model = model.eval()
-        #     model = model.to(self.device)
-        #     self.models[key] = model
 
     def predict(self, image_path,question, use_beam_search):
         """Run a single prediction on the model"""
-        print('Running a VQA prediction with image path ' + str(image_path) + ' and Question '+str(question)
-              +' &  beam search set to ' + str(use_beam_search))
+        print('Running a VQA prediction')
+        print('Image path ' + str(image_path))
+        print('Question '+str(question))
+        print('Beam search is set to ' + str(use_beam_search))
         image = io.imread(image_path)
         model = self.model
         pil_image = PIL.Image.fromarray(image)
@@ -636,19 +575,21 @@ class Predictor():
 
 if __name__ == '__main__':
     mypredictor = Predictor(weights_path='checkpoints/coco_prefix-002_colab_vqa.pt')
-
-
-
     # Images/COCO_val2014_000000060623.jpg
     # Images/COCO_val2014_000000165547.jpg
     # Images/COCO_val2014_000000354533.jpg
-
     # Images/COCO_val2014_000000562207.jpg
     # Images/COCO_val2014_000000386164.jpg
-
     # Images/CONCEPTUAL_02.jpg
     # Images/CONCEPTUAL_04.jpg
-
-    temp_img = 'Images/COCO_val2014_000000060623.jpg'
-    output = mypredictor.predict(image_path=temp_img,question='What is she doing?', use_beam_search=False)
+    temp_dict = [
+        {'question':'What is she doing?','image_path':'Images/COCO_val2014_000000060623.jpg'},
+        {'question': 'Does someone have a birthday?', 'image_path': 'Images/COCO_val2014_000000060623.jpg'},
+        {'question': 'What color is her hair?', 'image_path': 'Images/COCO_val2014_000000060623.jpg'},
+        {'question': 'What is she doing?', 'image_path': 'Images/COCO_val2014_000000060623.jpg'},
+        {'question': 'Is the bike in motion?', 'image_path': 'Images/COCO_val2014_000000354533.jpg'},
+        {'question': 'How many bikes?', 'image_path': 'Images/COCO_val2014_000000354533.jpg'},
+    ]
+    tempy = temp_dict[0]
+    output = mypredictor.predict(image_path=tempy.get('image_path'),question=tempy.get('question'), use_beam_search=False)
     print(output)

@@ -2,7 +2,7 @@ from evaluation.bleu.bleu import Bleu
 from evaluation.rouge.rouge import Rouge
 from evaluation.cider.cider import Cider
 from evaluation.meteor.meteor import Meteor
-
+from evaluation.tokenizer.ptbtokenizer import PTBTokenizer
 
 
 def score(ref, hypo):
@@ -50,5 +50,8 @@ if __name__ == '__main__':
 
     gen['0'] = caps_gen
     gts['0'] = caps_gt
-    # tokenize
+
+    gts = PTBTokenizer.tokenize(gts)
+    gen = PTBTokenizer.tokenize(gen)
+
     print(score(gts, gen))

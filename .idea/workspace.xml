@@ -1,42 +1,57 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <project version="4">
+  <component name="AutoImportSettings">
+    <option name="autoReloadType" value="SELECTIVE" />
+  </component>
   <component name="ChangeListManager">
-    <list default="true" id="7a415713-6726-4f73-a813-88033a52fffd" name="Default Changelist" comment="">
-      <change beforePath="$PROJECT_DIR$/train.py" beforeDir="false" afterPath="$PROJECT_DIR$/train.py" afterDir="false" />
+    <list default="true" id="7a415713-6726-4f73-a813-88033a52fffd" name="Default Changelist" comment="-- Initial Changes v18">
+      <change afterPath="$PROJECT_DIR$/dummy_evaluation.py" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/evaluation/__init__.py" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/evaluation/bleu/LICENSE" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/evaluation/bleu/__init__.py" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/evaluation/bleu/bleu.py" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/evaluation/bleu/bleu_scorer.py" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/evaluation/cider/__init__.py" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/evaluation/cider/cider.py" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/evaluation/cider/cider_scorer.py" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/evaluation/meteor/__init__.py" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/evaluation/meteor/data/paraphrase-en.gz" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/evaluation/meteor/meteor-1.5.jar" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/evaluation/meteor/meteor.py" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/evaluation/rouge/__init__.py" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/evaluation/rouge/rouge.py" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/evaluation/spice/__init__.py" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/evaluation/spice/lib/Meteor-1.5.jar" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/evaluation/spice/lib/SceneGraphParser-1.0.jar" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/evaluation/spice/lib/ejml-0.23.jar" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/evaluation/spice/lib/fst-2.47.jar" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/evaluation/spice/lib/guava-19.0.jar" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/evaluation/spice/lib/hamcrest-core-1.3.jar" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/evaluation/spice/lib/jackson-core-2.5.3.jar" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/evaluation/spice/lib/javassist-3.19.0-GA.jar" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/evaluation/spice/lib/json-simple-1.1.1.jar" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/evaluation/spice/lib/junit-4.12.jar" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/evaluation/spice/lib/lmdbjni-0.4.6.jar" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/evaluation/spice/lib/lmdbjni-linux64-0.4.6.jar" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/evaluation/spice/lib/lmdbjni-osx64-0.4.6.jar" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/evaluation/spice/lib/lmdbjni-win64-0.4.6.jar" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/evaluation/spice/lib/objenesis-2.4.jar" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/evaluation/spice/lib/slf4j-api-1.7.12.jar" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/evaluation/spice/lib/slf4j-simple-1.7.21.jar" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/evaluation/spice/spice-1.0.jar" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/evaluation/spice/spice.py" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/evaluation/tokenizer/__init__.py" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/evaluation/tokenizer/ptbtokenizer.py" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/evaluation/tokenizer/stanford-corenlp-3.4.1.jar" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/notebooks/clip_prefix_captioning_inference.ipynb" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/notebooks/transformer_inference.ipynb" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/predict_IC.py" beforeDir="false" afterPath="$PROJECT_DIR$/predict_IC.py" afterDir="false" />
     </list>
-    <option name="EXCLUDED_CONVERTED_TO_IGNORED" value="true" />
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
     <option name="HIGHLIGHT_NON_ACTIVE_CHANGELIST" value="false" />
     <option name="LAST_RESOLUTION" value="IGNORE" />
-  </component>
-  <component name="FileEditorManager">
-    <leaf SIDE_TABS_SIZE_LIMIT_KEY="300">
-      <file pinned="false" current-in-tab="false">
-        <entry file="file://$PROJECT_DIR$/parse_coco.py">
-          <provider selected="true" editor-type-id="text-editor">
-            <state relative-caret-position="165">
-              <caret line="16" column="32" selection-start-line="16" selection-start-column="32" selection-end-line="16" selection-end-column="32" />
-              <folding>
-                <element signature="e#0#23#0" expanded="true" />
-              </folding>
-            </state>
-          </provider>
-        </entry>
-      </file>
-      <file pinned="false" current-in-tab="true">
-        <entry file="file://$PROJECT_DIR$/train.py">
-          <provider selected="true" editor-type-id="text-editor">
-            <state relative-caret-position="357">
-              <caret line="310" column="38" selection-start-line="310" selection-start-column="38" selection-end-line="310" selection-end-column="38" />
-              <folding>
-                <element signature="e#0#12#0" expanded="true" />
-              </folding>
-            </state>
-          </provider>
-        </entry>
-      </file>
-    </leaf>
   </component>
   <component name="FileTemplateManagerImpl">
     <option name="RECENT_TEMPLATES">
@@ -64,6 +79,9 @@
       </list>
     </option>
   </component>
+  <component name="MarkdownSettingsMigration">
+    <option name="stateVersion" value="1" />
+  </component>
   <component name="ProjectConfigurationFiles">
     <option name="files">
       <list>
@@ -79,6 +97,7 @@
     <option name="width" value="1334" />
     <option name="height" value="721" />
   </component>
+  <component name="ProjectId" id="2JxfLc8Vr123Y58MjwhXQ6Depn1" />
   <component name="ProjectView">
     <navigator proportions="" version="1">
       <foldersAlwaysOnTop value="true" />
@@ -98,24 +117,141 @@
       <pane id="Scope" />
     </panes>
   </component>
-  <component name="PropertiesComponent">
-    <property name="WebServerToolWindowFactoryState" value="true" />
-    <property name="last_opened_file_path" value="$PROJECT_DIR$" />
-    <property name="nodejs_interpreter_path.stuck_in_default_project" value="undefined stuck path" />
-    <property name="nodejs_npm_path_reset_for_default_project" value="true" />
+  <component name="ProjectViewState">
+    <option name="hideEmptyMiddlePackages" value="true" />
+    <option name="showLibraryContents" value="true" />
   </component>
-  <component name="RunDashboard">
-    <option name="ruleStates">
+  <component name="PropertiesComponent"><![CDATA[{
+  "keyToString": {
+    "ASKED_ADD_EXTERNAL_FILES": "true",
+    "RunOnceActivity.ShowReadmeOnStart": "true",
+    "last_opened_file_path": "/home/chris/PycharmProjects/CLIP_prefix_caption",
+    "settings.editor.selected.configurable": "com.jetbrains.python.configuration.PyActiveSdkModuleConfigurable"
+  }
+}]]></component>
+  <component name="RecentsManager">
+    <key name="CopyFile.RECENT_KEYS">
+      <recent name="$PROJECT_DIR$" />
+      <recent name="$PROJECT_DIR$/myeval/bleu" />
+    </key>
+  </component>
+  <component name="RunManager" selected="Python.dummy_evaluation">
+    <configuration name="bleu_scorer" type="PythonConfigurationType" factoryName="Python" temporary="true" nameIsGenerated="true">
+      <module name="CLIP_prefix_caption" />
+      <option name="INTERPRETER_OPTIONS" value="" />
+      <option name="PARENT_ENVS" value="true" />
+      <envs>
+        <env name="PYTHONUNBUFFERED" value="1" />
+      </envs>
+      <option name="SDK_HOME" value="" />
+      <option name="WORKING_DIRECTORY" value="$PROJECT_DIR$/myeval/bleu" />
+      <option name="IS_MODULE_SDK" value="true" />
+      <option name="ADD_CONTENT_ROOTS" value="true" />
+      <option name="ADD_SOURCE_ROOTS" value="true" />
+      <option name="SCRIPT_NAME" value="$PROJECT_DIR$/myeval/bleu/bleu_scorer.py" />
+      <option name="PARAMETERS" value="" />
+      <option name="SHOW_COMMAND_LINE" value="false" />
+      <option name="EMULATE_TERMINAL" value="false" />
+      <option name="MODULE_MODE" value="false" />
+      <option name="REDIRECT_INPUT" value="false" />
+      <option name="INPUT_FILE" value="" />
+      <method v="2" />
+    </configuration>
+    <configuration name="dummy" type="PythonConfigurationType" factoryName="Python" temporary="true" nameIsGenerated="true">
+      <module name="CLIP_prefix_caption" />
+      <option name="INTERPRETER_OPTIONS" value="" />
+      <option name="PARENT_ENVS" value="true" />
+      <envs>
+        <env name="PYTHONUNBUFFERED" value="1" />
+      </envs>
+      <option name="SDK_HOME" value="" />
+      <option name="WORKING_DIRECTORY" value="$PROJECT_DIR$" />
+      <option name="IS_MODULE_SDK" value="true" />
+      <option name="ADD_CONTENT_ROOTS" value="true" />
+      <option name="ADD_SOURCE_ROOTS" value="true" />
+      <option name="SCRIPT_NAME" value="$PROJECT_DIR$/dummy.py" />
+      <option name="PARAMETERS" value="" />
+      <option name="SHOW_COMMAND_LINE" value="false" />
+      <option name="EMULATE_TERMINAL" value="false" />
+      <option name="MODULE_MODE" value="false" />
+      <option name="REDIRECT_INPUT" value="false" />
+      <option name="INPUT_FILE" value="" />
+      <method v="2" />
+    </configuration>
+    <configuration name="dummy_evaluation" type="PythonConfigurationType" factoryName="Python" temporary="true" nameIsGenerated="true">
+      <module name="CLIP_prefix_caption" />
+      <option name="INTERPRETER_OPTIONS" value="" />
+      <option name="PARENT_ENVS" value="true" />
+      <envs>
+        <env name="PYTHONUNBUFFERED" value="1" />
+      </envs>
+      <option name="SDK_HOME" value="" />
+      <option name="WORKING_DIRECTORY" value="$PROJECT_DIR$" />
+      <option name="IS_MODULE_SDK" value="true" />
+      <option name="ADD_CONTENT_ROOTS" value="true" />
+      <option name="ADD_SOURCE_ROOTS" value="true" />
+      <option name="SCRIPT_NAME" value="$PROJECT_DIR$/dummy_evaluation.py" />
+      <option name="PARAMETERS" value="" />
+      <option name="SHOW_COMMAND_LINE" value="false" />
+      <option name="EMULATE_TERMINAL" value="false" />
+      <option name="MODULE_MODE" value="false" />
+      <option name="REDIRECT_INPUT" value="false" />
+      <option name="INPUT_FILE" value="" />
+      <method v="2" />
+    </configuration>
+    <configuration name="predict_IC" type="PythonConfigurationType" factoryName="Python" temporary="true" nameIsGenerated="true">
+      <module name="CLIP_prefix_caption" />
+      <option name="INTERPRETER_OPTIONS" value="" />
+      <option name="PARENT_ENVS" value="true" />
+      <envs>
+        <env name="PYTHONUNBUFFERED" value="1" />
+      </envs>
+      <option name="SDK_HOME" value="" />
+      <option name="WORKING_DIRECTORY" value="$PROJECT_DIR$" />
+      <option name="IS_MODULE_SDK" value="true" />
+      <option name="ADD_CONTENT_ROOTS" value="true" />
+      <option name="ADD_SOURCE_ROOTS" value="true" />
+      <option name="SCRIPT_NAME" value="$PROJECT_DIR$/predict_IC.py" />
+      <option name="PARAMETERS" value="" />
+      <option name="SHOW_COMMAND_LINE" value="false" />
+      <option name="EMULATE_TERMINAL" value="false" />
+      <option name="MODULE_MODE" value="false" />
+      <option name="REDIRECT_INPUT" value="false" />
+      <option name="INPUT_FILE" value="" />
+      <method v="2" />
+    </configuration>
+    <configuration name="trainy_notes_VQA_attention_mask" type="PythonConfigurationType" factoryName="Python" temporary="true" nameIsGenerated="true">
+      <module name="CLIP_prefix_caption" />
+      <option name="INTERPRETER_OPTIONS" value="" />
+      <option name="PARENT_ENVS" value="true" />
+      <envs>
+        <env name="PYTHONUNBUFFERED" value="1" />
+      </envs>
+      <option name="SDK_HOME" value="" />
+      <option name="WORKING_DIRECTORY" value="$PROJECT_DIR$" />
+      <option name="IS_MODULE_SDK" value="true" />
+      <option name="ADD_CONTENT_ROOTS" value="true" />
+      <option name="ADD_SOURCE_ROOTS" value="true" />
+      <option name="SCRIPT_NAME" value="$PROJECT_DIR$/trainy_notes_VQA_attention_mask.py" />
+      <option name="PARAMETERS" value="" />
+      <option name="SHOW_COMMAND_LINE" value="false" />
+      <option name="EMULATE_TERMINAL" value="false" />
+      <option name="MODULE_MODE" value="false" />
+      <option name="REDIRECT_INPUT" value="false" />
+      <option name="INPUT_FILE" value="" />
+      <method v="2" />
+    </configuration>
+    <recent_temporary>
       <list>
-        <RuleState>
-          <option name="name" value="ConfigurationTypeDashboardGroupingRule" />
-        </RuleState>
-        <RuleState>
-          <option name="name" value="StatusDashboardGroupingRule" />
-        </RuleState>
+        <item itemvalue="Python.dummy_evaluation" />
+        <item itemvalue="Python.dummy" />
+        <item itemvalue="Python.predict_IC" />
+        <item itemvalue="Python.bleu_scorer" />
+        <item itemvalue="Python.trainy_notes_VQA_attention_mask" />
       </list>
-    </option>
+    </recent_temporary>
   </component>
+  <component name="SpellCheckerSettings" RuntimeDictionaries="0" Folders="0" CustomDictionaries="0" DefaultDictionary="application-level" UseSingleDictionary="true" transferred="true" />
   <component name="SvnConfiguration">
     <configuration />
   </component>
@@ -129,6 +265,126 @@
       <workItem from="1631795514442" duration="3308000" />
       <workItem from="1632492645974" duration="907000" />
     </task>
+    <task id="LOCAL-00001" summary="-- Initial Changes">
+      <created>1674943303769</created>
+      <option name="number" value="00001" />
+      <option name="presentableId" value="LOCAL-00001" />
+      <option name="project" value="LOCAL" />
+      <updated>1674943303769</updated>
+    </task>
+    <task id="LOCAL-00002" summary="-- Initial Changes v2">
+      <created>1674943548703</created>
+      <option name="number" value="00002" />
+      <option name="presentableId" value="LOCAL-00002" />
+      <option name="project" value="LOCAL" />
+      <updated>1674943548703</updated>
+    </task>
+    <task id="LOCAL-00003" summary="-- Initial Changes v3">
+      <created>1674987028564</created>
+      <option name="number" value="00003" />
+      <option name="presentableId" value="LOCAL-00003" />
+      <option name="project" value="LOCAL" />
+      <updated>1674987028564</updated>
+    </task>
+    <task id="LOCAL-00004" summary="-- Initial Changes v4">
+      <created>1675021182775</created>
+      <option name="number" value="00004" />
+      <option name="presentableId" value="LOCAL-00004" />
+      <option name="project" value="LOCAL" />
+      <updated>1675021182775</updated>
+    </task>
+    <task id="LOCAL-00005" summary="-- Initial Changes v5">
+      <created>1675084256974</created>
+      <option name="number" value="00005" />
+      <option name="presentableId" value="LOCAL-00005" />
+      <option name="project" value="LOCAL" />
+      <updated>1675084256974</updated>
+    </task>
+    <task id="LOCAL-00006" summary="-- Initial Changes v7">
+      <created>1675186301099</created>
+      <option name="number" value="00006" />
+      <option name="presentableId" value="LOCAL-00006" />
+      <option name="project" value="LOCAL" />
+      <updated>1675186301099</updated>
+    </task>
+    <task id="LOCAL-00007" summary="-- Initial Changes v8">
+      <created>1675237089994</created>
+      <option name="number" value="00007" />
+      <option name="presentableId" value="LOCAL-00007" />
+      <option name="project" value="LOCAL" />
+      <updated>1675237089994</updated>
+    </task>
+    <task id="LOCAL-00008" summary="-- Initial Changes v9">
+      <created>1675253041211</created>
+      <option name="number" value="00008" />
+      <option name="presentableId" value="LOCAL-00008" />
+      <option name="project" value="LOCAL" />
+      <updated>1675253041211</updated>
+    </task>
+    <task id="LOCAL-00009" summary="-- Initial Changes v10">
+      <created>1675253832153</created>
+      <option name="number" value="00009" />
+      <option name="presentableId" value="LOCAL-00009" />
+      <option name="project" value="LOCAL" />
+      <updated>1675253832153</updated>
+    </task>
+    <task id="LOCAL-00010" summary="-- Initial Changes v11">
+      <created>1675254712452</created>
+      <option name="number" value="00010" />
+      <option name="presentableId" value="LOCAL-00010" />
+      <option name="project" value="LOCAL" />
+      <updated>1675254712452</updated>
+    </task>
+    <task id="LOCAL-00011" summary="-- Initial Changes v12">
+      <created>1675266726921</created>
+      <option name="number" value="00011" />
+      <option name="presentableId" value="LOCAL-00011" />
+      <option name="project" value="LOCAL" />
+      <updated>1675266726921</updated>
+    </task>
+    <task id="LOCAL-00012" summary="-- Initial Changes v13">
+      <created>1675283574931</created>
+      <option name="number" value="00012" />
+      <option name="presentableId" value="LOCAL-00012" />
+      <option name="project" value="LOCAL" />
+      <updated>1675283574931</updated>
+    </task>
+    <task id="LOCAL-00013" summary="-- Initial Changes v14">
+      <created>1675333959323</created>
+      <option name="number" value="00013" />
+      <option name="presentableId" value="LOCAL-00013" />
+      <option name="project" value="LOCAL" />
+      <updated>1675333959323</updated>
+    </task>
+    <task id="LOCAL-00014" summary="-- Initial Changes v15">
+      <created>1675361422357</created>
+      <option name="number" value="00014" />
+      <option name="presentableId" value="LOCAL-00014" />
+      <option name="project" value="LOCAL" />
+      <updated>1675361422357</updated>
+    </task>
+    <task id="LOCAL-00015" summary="-- Initial Changes v16">
+      <created>1675361629588</created>
+      <option name="number" value="00015" />
+      <option name="presentableId" value="LOCAL-00015" />
+      <option name="project" value="LOCAL" />
+      <updated>1675361629588</updated>
+    </task>
+    <task id="LOCAL-00016" summary="-- Initial Changes v17">
+      <created>1675363782216</created>
+      <option name="number" value="00016" />
+      <option name="presentableId" value="LOCAL-00016" />
+      <option name="project" value="LOCAL" />
+      <updated>1675363782216</updated>
+    </task>
+    <task id="LOCAL-00017" summary="-- Initial Changes v18">
+      <created>1675424537066</created>
+      <option name="number" value="00017" />
+      <option name="presentableId" value="LOCAL-00017" />
+      <option name="project" value="LOCAL" />
+      <updated>1675424537066</updated>
+    </task>
+    <option name="localTasksCounter" value="18" />
     <servers />
   </component>
   <component name="TimeTrackingManager">
@@ -164,6 +420,84 @@
   </component>
   <component name="TypeScriptGeneratedFilesManager">
     <option name="version" value="1" />
+  </component>
+  <component name="VcsManagerConfiguration">
+    <MESSAGE value="-- Initial Changes" />
+    <MESSAGE value="-- Initial Changes v2" />
+    <MESSAGE value="-- Initial Changes v3" />
+    <MESSAGE value="-- Initial Changes v4" />
+    <MESSAGE value="-- Initial Changes v5" />
+    <MESSAGE value="-- Initial Changes v7" />
+    <MESSAGE value="-- Initial Changes v8" />
+    <MESSAGE value="-- Initial Changes v9" />
+    <MESSAGE value="-- Initial Changes v10" />
+    <MESSAGE value="-- Initial Changes v11" />
+    <MESSAGE value="-- Initial Changes v12" />
+    <MESSAGE value="-- Initial Changes v13" />
+    <MESSAGE value="-- Initial Changes v14" />
+    <MESSAGE value="-- Initial Changes v15" />
+    <MESSAGE value="-- Initial Changes v16" />
+    <MESSAGE value="-- Initial Changes v17" />
+    <MESSAGE value="-- Initial Changes v18" />
+    <option name="LAST_COMMIT_MESSAGE" value="-- Initial Changes v18" />
+  </component>
+  <component name="XDebuggerManager">
+    <breakpoint-manager>
+      <breakpoints>
+        <line-breakpoint enabled="true" suspend="THREAD" type="python-line">
+          <url>file://$PROJECT_DIR$/trainy_notes.py</url>
+          <line>343</line>
+          <option name="timeStamp" value="11" />
+        </line-breakpoint>
+        <line-breakpoint enabled="true" suspend="THREAD" type="python-line">
+          <url>file://$PROJECT_DIR$/predict_VQA.py</url>
+          <line>496</line>
+          <option name="timeStamp" value="14" />
+        </line-breakpoint>
+        <line-breakpoint enabled="true" suspend="THREAD" type="python-line">
+          <url>file://$PROJECT_DIR$/predict_VQA.py</url>
+          <line>474</line>
+          <option name="timeStamp" value="15" />
+        </line-breakpoint>
+        <line-breakpoint enabled="true" suspend="THREAD" type="python-line">
+          <url>file://$PROJECT_DIR$/predict_VQA.py</url>
+          <line>512</line>
+          <option name="timeStamp" value="17" />
+        </line-breakpoint>
+        <line-breakpoint enabled="true" suspend="THREAD" type="python-line">
+          <url>file://$PROJECT_DIR$/trainy_notes_VQA.py</url>
+          <line>376</line>
+          <option name="timeStamp" value="18" />
+        </line-breakpoint>
+        <line-breakpoint enabled="true" suspend="THREAD" type="python-line">
+          <url>file://$PROJECT_DIR$/predict_IC.py</url>
+          <line>444</line>
+          <option name="timeStamp" value="19" />
+        </line-breakpoint>
+        <line-breakpoint enabled="true" suspend="THREAD" type="python-line">
+          <url>file://$PROJECT_DIR$/predict_IC.py</url>
+          <line>618</line>
+          <option name="timeStamp" value="20" />
+        </line-breakpoint>
+        <line-breakpoint enabled="true" suspend="THREAD" type="python-line">
+          <url>file://$PROJECT_DIR$/predict_IC.py</url>
+          <line>467</line>
+          <option name="timeStamp" value="21" />
+        </line-breakpoint>
+        <line-breakpoint enabled="true" suspend="THREAD" type="python-line">
+          <url>file://$PROJECT_DIR$/predict_IC.py</url>
+          <line>498</line>
+          <option name="timeStamp" value="22" />
+        </line-breakpoint>
+      </breakpoints>
+      <default-breakpoints>
+        <breakpoint type="python-exception">
+          <properties notifyOnTerminate="true" exception="BaseException">
+            <option name="notifyOnTerminate" value="true" />
+          </properties>
+        </breakpoint>
+      </default-breakpoints>
+    </breakpoint-manager>
   </component>
   <component name="editorHistoryManager">
     <entry file="file://$PROJECT_DIR$/parse_coco.py">

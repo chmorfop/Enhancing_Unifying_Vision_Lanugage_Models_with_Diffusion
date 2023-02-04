@@ -570,7 +570,6 @@ def generate2(
             output_text = tokenizer.decode(output_list)
             generated_list.append(output_text)
 
-    temp = 'checkpoint'
 
     return generated_list[0]
 
@@ -596,13 +595,6 @@ class Predictor():
         model = model.to(self.device)
         self.model = model
 
-        # for key, weights_path in WEIGHTS_PATHS.items():
-        #     model = ClipCaptionModel(self.prefix_length)
-        #     model.load_state_dict(torch.load(weights_path, map_location=CPU))
-        #     model = model.eval()
-        #     model = model.to(self.device)
-        #     self.models[key] = model
-
     def predict(self, image_path, use_beam_search):
         """Run a single prediction on the model"""
         print('Running a prediction with image path ' + str(image_path) + ' &  beam search set to ' + str(use_beam_search))
@@ -616,7 +608,7 @@ class Predictor():
             )
             prefix_embed = model.clip_project(prefix).reshape(1, self.prefix_length, -1)
         if use_beam_search:
-            return generate_beam(model, self.tokenizer, embed=prefix_embed)[0]
+            return generate_beam(model, self.tokenizer, embed=prefix_embed)
         else:
             return generate2(model, self.tokenizer, embed=prefix_embed)
 
@@ -624,16 +616,6 @@ class Predictor():
 if __name__ == '__main__':
     print('hello from my predict.py !!')
     mypredictor = Predictor(weights_path='checkpoints/coco_prefix-009_iarai.pt')
-    # Images/COCO_val2014_000000060623.jpg
-    # Images/COCO_val2014_000000165547.jpg
-    # Images/COCO_val2014_000000354533.jpg
-
-    # Images/COCO_val2014_000000562207.jpg
-    # Images/COCO_val2014_000000386164.jpg
-
-    # Images/CONCEPTUAL_02.jpg
-    # Images/CONCEPTUAL_04.jpg
-
     temp_img = 'Images/CONCEPTUAL_04.jpg'
-    output = mypredictor.predict(image_path=temp_img, use_beam_search=False)
+    output = mypredictor.predict(image_path=temp_img, use_beam_search=True)
     print(output)

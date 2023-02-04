@@ -1,0 +1,33 @@
+60623
+
+
+Does someone have a birthday?
+yes
+
+What color is her hair?
+black
+
+What is she doing?
+blowing out candle
+
+Is that a watch on someone's hand?
+yes
+
+----------------------------------------------------------------------------
+
+354533
+
+What objects are covering the saddle bag of the man's motorcycle?
+none
+
+Is the bike in motion?
+no
+
+Is there a rider on the bike?
+no
+
+How many bikes?
+1
+
+Is that bike fast?
+yes

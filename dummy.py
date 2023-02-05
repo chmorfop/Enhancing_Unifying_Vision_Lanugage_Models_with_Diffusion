@@ -67,7 +67,7 @@ import json
 
 # Opening JSON file
 # f = open('/home/chris/PycharmProjects/CLIP_prefix_caption/data/VQA/val_data.json')
-f = open('/media/chris/4f8d85a4-7412-4e22-89be-f483a57450c0/home/morf/Desktop/val_data.json')
+# f = open('/media/chris/4f8d85a4-7412-4e22-89be-f483a57450c0/home/morf/Desktop/val_data.json')
 
 # returns JSON object as
 # a dictionary
@@ -86,28 +86,170 @@ f = open('/media/chris/4f8d85a4-7412-4e22-89be-f483a57450c0/home/morf/Desktop/va
 #             print(d.get('caption'))
 #             print(z)
 
-import itertools
+# import itertools
+#
+# gen = {}
+# gts = {}
+# it = 0
+#
+# caps_gt = [['A narrow kitchen filled with appliances and cooking utensils.',
+#             'A galley kitchen with cabinets and appliances on both sides',
+#             'A hallway leading into a white kitchen with appliances.',
+#             'Doorway view of a kitchen with a sink, stove, refrigerator and pantry.',
+#             'The pantry door of the small kitchen is closed.']]
+#
+# caps_gen = [['A simple kitchen with appliances and a white kitchen board']]
+# for i, (gts_i, gen_i) in enumerate(zip(caps_gt, caps_gen)):
+#     print(gts_i)
+#     print(gen_i)
+#     ll= []
+#     for k,g in itertools.groupby(gen_i):
+#         print(k)
+#         ll.append(k)
+#     print(ll)
+#     print(' '.join([k for k, g in itertools.groupby(gen_i)]))
+#     # gen_i = ' '.join([k for k, g in itertools.groupby(gen_i)])
+#     # gen['%d_%d' % (it, i)] = [gen_i, ]
+#     # gts['%d_%d' % (it, i)] = gts_i
 
-gen = {}
-gts = {}
-it = 0
 
-caps_gt = [['A narrow kitchen filled with appliances and cooking utensils.',
-            'A galley kitchen with cabinets and appliances on both sides',
-            'A hallway leading into a white kitchen with appliances.',
-            'Doorway view of a kitchen with a sink, stove, refrigerator and pantry.',
-            'The pantry door of the small kitchen is closed.']]
 
-caps_gen = [['A simple kitchen with appliances and a white kitchen board']]
-for i, (gts_i, gen_i) in enumerate(zip(caps_gt, caps_gen)):
-    print(gts_i)
-    print(gen_i)
-    ll= []
-    for k,g in itertools.groupby(gen_i):
-        print(k)
-        ll.append(k)
-    print(ll)
-    print(' '.join([k for k, g in itertools.groupby(gen_i)]))
-    # gen_i = ' '.join([k for k, g in itertools.groupby(gen_i)])
-    # gen['%d_%d' % (it, i)] = [gen_i, ]
-    # gts['%d_%d' % (it, i)] = gts_i
+# import torch
+#
+# # Initialize a 3D tensor with random values
+# a = torch.rand(3, 4, 5)
+# print("Original tensor:")
+# print(a)
+# print(a.size())
+#
+# # Define the threshold value
+# threshold = 0.5
+#
+# # Create a Boolean mask to select only the values below the threshold
+# mask = a < threshold
+# print("Boolean mask:")
+# print(mask)
+# print(mask.size())
+#
+# # Use the Boolean mask to index into the tensor and select only the values below the threshold
+# filtered = a[mask]
+# print("Filtered tensor:")
+# print(filtered.size())
+# print()
+#
+# print(filtered)
+
+# import torch
+#
+# # Initialize a 3D tensor with random values
+# a = torch.rand(3, 4, 5)
+# print("Original tensor:")
+# print(a)
+# print(a.size())
+#
+# # Define the threshold value
+# threshold = 0.5
+#
+# # Create a Boolean mask to select only the values above the threshold
+# mask = a > threshold
+#
+# # Use the Boolean mask to fill the values above the threshold with -inf
+# a.masked_fill_(mask, float("-inf"))
+# print("Masked tensor:")
+# print(a.size())
+# print()
+# print(a)
+
+
+# sorted_indices_to_remove[..., 1:] = sorted_indices_to_remove[..., :-1].clone()
+# sorted_indices_to_remove[..., 0] = 0
+
+# import torch
+#
+# array = torch.rand( 3, 10)
+#
+# print(array)
+# print(array.size())
+# print()
+# print('***')
+# print()
+#
+# # kovei to prwto stoixeio
+# # print(array[...,1:])
+# # print(array[...,1:].size())
+# # print()
+# # kovei to teleutaio stoixeio
+# # print(array[...,:-1])
+# # print(array[...,:-1].size())
+# # print()
+# # to prwto stoixeio to kanei 0?
+# # array[..., 0] = 0
+#
+#
+# array[..., 1:] = array[..., :-1].clone()
+# array[..., 0] = 0
+# print(array)
+# print(array.size())
+
+
+import torch
+
+
+# # Create a tensor of 5 elements
+# array = torch.rand( 3, 10)
+# print(array)
+#
+# sorted_logits, sorted_indices = torch.sort(array, descending=True)
+#
+# # Create a boolean mask with the same size as the tensor
+# mask = sorted_logits > 0.2
+# print(mask)
+#
+#
+# # The result is a tensor with only the elements from the original tensor that satisfy the condition
+# # print()
+# # print()
+# # print(result) # tensor([3, 4, 5])
+# # print(result.size())
+#
+#
+# tempy = array * mask
+# print(tempy)
+# print(tempy.size())
+#
+# tempy[:, torch.tensor(2,3)]=10
+# print(tempy)
+
+# import torch
+#
+# # Initialize a 3D tensor with random values
+# # a = torch.rand(2, 2, 2)
+# a = torch.tensor([1, 2, 3])
+# print(a)
+# print(a.all())
+
+
+# import torch
+#
+#
+# # Create a tensor of 5 elements
+# array = torch.rand( 3, 10)
+# print(array)
+#
+# testy = torch.tensor([[ 2,4],
+#         [2,4],
+#         [2,4]])
+# print(testy)
+# print(testy.size())
+# array[:, testy] = -float("Inf")
+# print(array)
+
+
+import torch
+
+basic_tensor = torch.randn(3, 50257)
+boolean_tensor = (basic_tensor > 0).to(torch.float)
+print(boolean_tensor)
+masked_tensor = torch.masked_select(basic_tensor, boolean_tensor.bool())
+masked_tensor = masked_tensor.reshape( -1)
+print(masked_tensor)

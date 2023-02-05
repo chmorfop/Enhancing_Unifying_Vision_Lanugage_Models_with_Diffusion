@@ -15,7 +15,7 @@ def main(clip_model_type: str):
     clip_model_name = clip_model_type.replace('/', '_')
     out_path = f"/content/clipcap/data/coco/clip_feat_{clip_model_name}_train_ic.pkl"
     clip_model, preprocess = clip.load(clip_model_type, device=device, jit=False)
-    annotation_path = '/content/drive/MyDrive/Colab Notebooks/COCO/Annotations/COCO_captions_val2014.json'
+    annotation_path = '/content/drive/MyDrive/Colab Notebooks/COCO/Annotations/COCO_captions_train2014.json'
     with open(annotation_path, 'r') as f:
         ann = json.load(f).get('annotations')
 

@@ -324,11 +324,10 @@ def apply_validation(model, val_dataloader, epoch, prefix_length):
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     val_loss = 0
     model.eval()
-    for idx, (tokens, mask, mask4gpt, prefix) in enumerate(val_dataloader):
-        tokens, mask, mask4gpt, prefix = tokens.to(device), mask.to(device), mask4gpt.to(device), prefix.to(device,
-                                                                                                            dtype=torch.float32)
+    for idx, (tokens, mask, prefix) in enumerate(val_dataloader):
+        tokens, mask, prefix = tokens.to(device), mask.to(device), prefix.to(device,dtype=torch.float32)
         with torch.no_grad():
-            outputs = model(tokens, prefix, mask4gpt)
+            outputs = model(tokens, prefix, mask)
             logits = outputs.logits[:, prefix_length - 1: -1]
             new_mask = mask[:, 10:]
             bool_mask = new_mask.ge(1).view(-1)
@@ -395,6 +394,7 @@ def train(model: ClipCaptionModel, train_dataset: ClipCocoDataset,
             outputs = model(tokens, prefix, mask)
             logits = outputs.logits[:, train_dataset.prefix_length - 1: -1]
             loss = nnf.cross_entropy(logits.reshape(-1, logits.shape[-1]), tokens.flatten(), ignore_index=0)
+            train_loss = train_loss + loss.item()
             loss.backward()
             optimizer.step()
             scheduler.step()

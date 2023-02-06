@@ -12,7 +12,7 @@ import argparse
 import json
 import numpy as np
 from typing import Tuple, Optional, Union
-import matplotlib.pyplot as plt
+# import matplotlib.pyplot as plt
 import copy
 
 
@@ -324,7 +324,7 @@ def apply_validation(model, val_dataloader, epoch, prefix_length):
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     val_loss = 0
     model.eval()
-    for idx, (tokens, mask, mask4gpt, prefix) in enumerate(val_dataloader):
+    for idx, (tokens, mask, prefix) in enumerate(val_dataloader):
         tokens, mask, prefix = tokens.to(device), mask.to(device), prefix.to(device,dtype=torch.float32)
         with torch.no_grad():
             outputs = model(tokens, prefix, mask)

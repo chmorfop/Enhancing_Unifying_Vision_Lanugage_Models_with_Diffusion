@@ -390,6 +390,7 @@ def train(model: ClipCaptionModel, train_dataset: ClipCocoDataset,
             outputs = model(tokens, prefix, mask)
             logits = outputs.logits[:, train_dataset.prefix_length - 1: -1]
             loss = nnf.cross_entropy(logits.reshape(-1, logits.shape[-1]), tokens.flatten(), ignore_index=0)
+            train_loss = train_loss + loss.item()
             loss.backward()
             optimizer.step()
             scheduler.step()

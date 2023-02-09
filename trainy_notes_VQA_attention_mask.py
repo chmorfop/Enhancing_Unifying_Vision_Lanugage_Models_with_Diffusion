@@ -384,10 +384,70 @@ class EarlyStopping:
             if self.counter >= self.tolerance:
                 self.early_stop = True
 
+
+def generate_caption_validation(model, val_dataset, myconfig, weights_path=None):
+    max_length = 67
+    temperature = 1.0
+    tokens = None
+    tokenizer = GPT2Tokenizer.from_pretrained("gpt2")
+    stop_token_index = tokenizer.encode('.')[0]
+    eos_token_index = tokenizer.eos_token_id
+
+    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+
+    seq_lengths = torch.ones(myconfig.get('batch_size'), device=device)
+    is_stopped = torch.zeros(myconfig.get('batch_size'), device=device, dtype=torch.bool)
+
+    val_dataloader = DataLoader(val_dataset, batch_size=myconfig.get('batch_size'), shuffle=False, drop_last=False)
+
+    model.load_state_dict(torch.load(weights_path, map_location=device))
+    model = model.to(device)
+    model.eval()
+
+    final_captions = []
+    final_predicted_captions = []
+
+    for (captions, mask, mask4gpt, prefix) in tqdm(val_dataloader):
+        captions, mask, mask4gpt, prefix = captions.to(device), mask.to(device), mask4gpt.to(device), prefix.to(device,
+                                                                                                                dtype=torch.float32)
+        for b in range(myconfig.get('batch_size')):
+            new_mask = mask[:, 10:].ge(1)
+            modified_captions = captions*new_mask
+            temp = modified_captions[b]
+            final_captions.append(tokenizer.decode(temp[temp.nonzero()].squeeze(), skip_special_tokens=True) )
+
+        with torch.no_grad():
+            generated = model.clip_project(prefix)
+            for i in range(max_length):
+                outputs = model.gpt(inputs_embeds=generated)
+                logits = outputs.logits
+                logits = logits[:, -1, :] / (temperature if temperature > 0 else 1.0)
+                logits = logits.softmax(-1).log()
+                scores, next_tokens = logits.topk(1, -1)
+                if tokens is None:
+                    tokens = next_tokens
+                else:
+                    tokens = torch.cat((tokens, next_tokens), dim=1)
+                next_token_embed = model.gpt.transformer.wte(next_tokens)
+                generated = torch.cat((generated, next_token_embed), dim=1)
+
+                seq_lengths[~is_stopped] += 1
+                is_stopped = is_stopped + next_tokens.eq(stop_token_index).squeeze() + \
+                             next_tokens.eq(eos_token_index).squeeze()
+                if is_stopped.all():
+                    break
+
+            output_list = tokens.cpu().numpy()
+            output_texts = [
+                tokenizer.decode(output[: int(length)], skip_special_tokens=True)
+                for output, length in zip(output_list, seq_lengths)]
+            final_predicted_captions.extend(output_texts)
+            temp = 'checkpoint'
+
+
 def train(model: ClipCaptionModel, train_dataset: ClipCocoDataset,
           val_dataset: ClipCocoDataset, myconfig,lr: float = 2e-5,
           warmup_steps: int = 5000, output_dir: str = ".", model_name: str = ""):
-
 
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     # test_tokenizer = GPT2Tokenizer.from_pretrained('gpt2')
@@ -480,11 +540,11 @@ def train(model: ClipCaptionModel, train_dataset: ClipCocoDataset,
 def main():
     myconfig = {
         'epochs': 1,
-        'batch_size': 32,
+        'batch_size': 4,
         # './data/coco/oscar_split_ViT-B_32_trainy_vqa_1024.pkl'
         # '/content/drive/MyDrive/Colab Notebooks/test_data/oscar_split_ViT-B_32_trainy_vqa_1024.pkl'
-        'train_data': '/content/clipcap/data/coco/clip_feat_ViT-B_32_train_vqa.pkl',
-        'val_data': '/content/clipcap/data/coco/clip_feat_ViT-B_32_val_vqa.pkl',
+        'train_data': './data/coco/clip_feat_ViT-B_32_train_vqa.pkl',
+        'val_data': '/home/chris/PycharmProjects/CLIP_prefix_caption/data/coco/oscar_split_ViT-B_32_trainy_vqa_1024.pkl',
         'out_dir': './outputdir',
         # 'prefix': 'coco_prefix',
         'save_every': 1,
@@ -501,18 +561,19 @@ def main():
     print('Logging args **** ' + str(myconfig))
     prefix_dim = 640 if myconfig.get('is_rn') else 512
     print()
-    train_dataset = ClipCocoDataset(myconfig.get('train_data'), myconfig.get('prefix_length'),
-                                    normalize_prefix=myconfig.get('normalize_prefix'))
+    # train_dataset = ClipCocoDataset(myconfig.get('train_data'), myconfig.get('prefix_length'),
+    #                                 normalize_prefix=myconfig.get('normalize_prefix'))
     val_dataset = ClipCocoDataset(myconfig.get('val_data'), myconfig.get('prefix_length'),
                                   normalize_prefix=myconfig.get('normalize_prefix'))
     mapping_type = {'mlp': MappingType.MLP, 'transformer': MappingType.Transformer}[myconfig.get('mapping_type')]
     print()
-    # TODO CHECK DIFFERENCE prefix_length - prefix_length_clip
     model = ClipCaptionPrefix(myconfig.get('prefix_length'), clip_length=myconfig.get('prefix_length_clip'),
                               prefix_size=prefix_dim, num_layers=myconfig.get('num_layers'),
                               mapping_type=mapping_type)
-    train(model, train_dataset, val_dataset, myconfig, output_dir=myconfig.get('out_dir'),
-          model_name=myconfig.get('model_name'))
+    # train(model, train_dataset, val_dataset, myconfig, output_dir=myconfig.get('out_dir'),
+    #       model_name=myconfig.get('model_name'))
+
+    generate_caption_validation(model, val_dataset, myconfig, weights_path='/home/chris/PycharmProjects/CLIP_prefix_caption/checkpoints/my_coco_vqa_model_bestmodel.pt')
 
 
 if __name__ == '__main__':

@@ -574,7 +574,7 @@ class Predictor():
 
 
 if __name__ == '__main__':
-    mypredictor = Predictor(weights_path='checkpoints/coco_prefix-002_colab_vqa.pt')
+    mypredictor = Predictor(weights_path='checkpoints/my_coco_vqa_model_bestmodel.pt')
     # Images/COCO_val2014_000000060623.jpg
     # Images/COCO_val2014_000000165547.jpg
     # Images/COCO_val2014_000000354533.jpg
@@ -589,7 +589,9 @@ if __name__ == '__main__':
         {'question': 'What is she doing?', 'image_path': 'Images/COCO_val2014_000000060623.jpg'},
         {'question': 'Is the bike in motion?', 'image_path': 'Images/COCO_val2014_000000354533.jpg'},
         {'question': 'How many bikes?', 'image_path': 'Images/COCO_val2014_000000354533.jpg'},
+        {'question': 'Where is he looking?', 'image_path': 'Images/262148.jpg'}, #down -looking  // at? - skateboard
+        {'question': 'What are the people in the background doing?', 'image_path': 'Images/262148.jpg'} #skateboarding - watching
     ]
-    tempy = temp_dict[0]
+    tempy = temp_dict[-1]
     output = mypredictor.predict(image_path=tempy.get('image_path'),question=tempy.get('question'), use_beam_search=False)
     print(output)

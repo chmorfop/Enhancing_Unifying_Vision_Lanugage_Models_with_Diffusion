@@ -385,64 +385,92 @@ class EarlyStopping:
                 self.early_stop = True
 
 
-def generate_caption_validation(model, val_dataset, myconfig, weights_path=None):
-    max_length = 67
-    temperature = 1.0
+def generate_per_batch(model, prefix, question, batch_size):
     tokens = None
+    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     tokenizer = GPT2Tokenizer.from_pretrained("gpt2")
     stop_token_index = tokenizer.encode('.')[0]
     eos_token_index = tokenizer.eos_token_id
+    max_length = 67
+    temperature = 1.0
+    seq_lengths = torch.ones(batch_size, device=device)
+    is_stopped = torch.zeros(batch_size, device=device, dtype=torch.bool)
+    with torch.no_grad():
+        embed = model.clip_project(prefix)
+        embedding_text = model.gpt.transformer.wte(question).unsqueeze(0)
+        generated = torch.cat((embed, embedding_text), dim=1)
+        for i in range(max_length):
+            outputs = model.gpt(inputs_embeds=generated)
 
+            logits = outputs.logits
+            logits = logits[:, -1, :] / (temperature if temperature > 0 else 1.0)
+            logits = logits.softmax(-1).log()
+            scores, next_tokens = logits.topk(1, -1)
+            if tokens is None:
+                tokens = next_tokens
+            else:
+                tokens = torch.cat((tokens, next_tokens), dim=1)
+            next_token_embed = model.gpt.transformer.wte(next_tokens)
+            generated = torch.cat((generated, next_token_embed), dim=1)
+
+            seq_lengths[~is_stopped] += 1
+            is_stopped = is_stopped + next_tokens.eq(stop_token_index).squeeze() + \
+                         next_tokens.eq(eos_token_index).squeeze()
+            if is_stopped.all():
+                break
+
+        output_list = tokens.cpu().numpy()
+        output_texts = [
+            tokenizer.decode(output[: int(length)], skip_special_tokens=True)
+            for output, length in zip(output_list, seq_lengths)]
+    return output_texts
+
+
+def validation_generation(model, val_dataset, weights_path=None):
+    full_gt_dict = {}
+    gen = {}
+    gts = {}
+    batch_size = 1
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-
-    seq_lengths = torch.ones(myconfig.get('batch_size'), device=device)
-    is_stopped = torch.zeros(myconfig.get('batch_size'), device=device, dtype=torch.bool)
-
-    val_dataloader = DataLoader(val_dataset, batch_size=myconfig.get('batch_size'), shuffle=False, drop_last=False)
-
+    val_dataloader = DataLoader(val_dataset, batch_size=batch_size, shuffle=False, drop_last=False)
+    gt_image_ids = val_dataset.image_ids
+    gt_questions = val_dataset.questions
+    gt_answers = val_dataset.answers
     model.load_state_dict(torch.load(weights_path, map_location=device))
     model = model.to(device)
     model.eval()
+    predicted_answers = []
 
-    final_captions = []
-    final_predicted_captions = []
-
-    for (captions, mask, mask4gpt, prefix) in tqdm(val_dataloader):
+    for (captions, mask, mask4gpt, prefix) in tqdm(val_dataloader, total=len(val_dataloader), desc='Generate Captions/Answers' ):
         captions, mask, mask4gpt, prefix = captions.to(device), mask.to(device), mask4gpt.to(device), prefix.to(device,
                                                                                                                 dtype=torch.float32)
-        for b in range(myconfig.get('batch_size')):
+        for b in range(batch_size):
             new_mask = mask[:, 10:].ge(1)
-            modified_captions = captions*new_mask
-            temp = modified_captions[b]
-            final_captions.append(tokenizer.decode(temp[temp.nonzero()].squeeze(), skip_special_tokens=True) )
+            new_mask4gpt = mask4gpt[:, 10:].ge(1)
+            question_mask = torch.logical_xor(new_mask,new_mask4gpt)
+            questions = captions*question_mask
+            question = questions.squeeze()
+            question = question[question.nonzero()].squeeze()
 
-        with torch.no_grad():
-            generated = model.clip_project(prefix)
-            for i in range(max_length):
-                outputs = model.gpt(inputs_embeds=generated)
-                logits = outputs.logits
-                logits = logits[:, -1, :] / (temperature if temperature > 0 else 1.0)
-                logits = logits.softmax(-1).log()
-                scores, next_tokens = logits.topk(1, -1)
-                if tokens is None:
-                    tokens = next_tokens
-                else:
-                    tokens = torch.cat((tokens, next_tokens), dim=1)
-                next_token_embed = model.gpt.transformer.wte(next_tokens)
-                generated = torch.cat((generated, next_token_embed), dim=1)
+        output_texts = generate_per_batch(model,prefix,question,batch_size)
+        predicted_answers.extend(output_texts)
 
-                seq_lengths[~is_stopped] += 1
-                is_stopped = is_stopped + next_tokens.eq(stop_token_index).squeeze() + \
-                             next_tokens.eq(eos_token_index).squeeze()
-                if is_stopped.all():
-                    break
+    assert len(predicted_answers) == len(gt_answers)
+    print('# Generations : ' + str(len(gt_answers)))
 
-            output_list = tokens.cpu().numpy()
-            output_texts = [
-                tokenizer.decode(output[: int(length)], skip_special_tokens=True)
-                for output, length in zip(output_list, seq_lengths)]
-            final_predicted_captions.extend(output_texts)
-            temp = 'checkpoint'
+    for i, (pred_a, gt_a) in enumerate(zip(predicted_answers, gt_answers)):
+        gen[str(i)] = pred_a
+        gts[str(i)] = gt_a
+        full_gt_dict[str(i)] = {'image_id': gt_image_ids[i],
+                                'question': gt_questions[i],
+                                'answer': gt_a,
+                                'predicted_answer': pred_a
+                                }
+
+    with open("./full_gt_dict.json", "w") as outfile:
+        json.dump(full_gt_dict, outfile)
+
+    return gen, gts, full_gt_dict
 
 
 def train(model: ClipCaptionModel, train_dataset: ClipCocoDataset,
@@ -540,7 +568,7 @@ def train(model: ClipCaptionModel, train_dataset: ClipCocoDataset,
 def main():
     myconfig = {
         'epochs': 1,
-        'batch_size': 4,
+        'batch_size': 1,
         # './data/coco/oscar_split_ViT-B_32_trainy_vqa_1024.pkl'
         # '/content/drive/MyDrive/Colab Notebooks/test_data/oscar_split_ViT-B_32_trainy_vqa_1024.pkl'
         'train_data': './data/coco/clip_feat_ViT-B_32_train_vqa.pkl',
@@ -555,7 +583,8 @@ def main():
         'num_layers': 8,
         'is_rn': False,
         'normalize_prefix': False,
-        'model_name': 'my_coco_vqa_model'
+        'model_name': 'my_coco_vqa_model',
+        'weights_path' : '/home/chris/PycharmProjects/CLIP_prefix_caption/checkpoints/my_coco_vqa_model_bestmodel.pt'
 
     }
     print('Logging args **** ' + str(myconfig))
@@ -573,7 +602,7 @@ def main():
     # train(model, train_dataset, val_dataset, myconfig, output_dir=myconfig.get('out_dir'),
     #       model_name=myconfig.get('model_name'))
 
-    generate_caption_validation(model, val_dataset, myconfig, weights_path='/home/chris/PycharmProjects/CLIP_prefix_caption/checkpoints/my_coco_vqa_model_bestmodel.pt')
+    gen, gts, full_gt_dict = validation_generation(model, val_dataset, weights_path=myconfig.get('weights_path'))
 
 
 if __name__ == '__main__':

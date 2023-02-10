@@ -14,6 +14,11 @@ import numpy as np
 from typing import Tuple, Optional, Union
 import matplotlib.pyplot as plt
 import copy
+from evaluation.bleu.bleu import Bleu
+from evaluation.rouge.rouge import Rouge
+from evaluation.cider.cider import Cider
+from evaluation.meteor.meteor import Meteor
+from evaluation.tokenizer.ptbtokenizer import PTBTokenizer
 
 
 class MappingType(Enum):
@@ -441,18 +446,19 @@ def validation_generation(model, val_dataset, weights_path=None):
     model.eval()
     predicted_answers = []
 
-    for (captions, mask, mask4gpt, prefix) in tqdm(val_dataloader, total=len(val_dataloader), desc='Generate Captions/Answers' ):
+    for (captions, mask, mask4gpt, prefix) in tqdm(val_dataloader, total=len(val_dataloader),
+                                                   desc='Generate Captions/Answers'):
         captions, mask, mask4gpt, prefix = captions.to(device), mask.to(device), mask4gpt.to(device), prefix.to(device,
                                                                                                                 dtype=torch.float32)
         for b in range(batch_size):
             new_mask = mask[:, 10:].ge(1)
             new_mask4gpt = mask4gpt[:, 10:].ge(1)
-            question_mask = torch.logical_xor(new_mask,new_mask4gpt)
-            questions = captions*question_mask
+            question_mask = torch.logical_xor(new_mask, new_mask4gpt)
+            questions = captions * question_mask
             question = questions.squeeze()
             question = question[question.nonzero()].squeeze()
 
-        output_texts = generate_per_batch(model,prefix,question,batch_size)
+        output_texts = generate_per_batch(model, prefix, question, batch_size)
         predicted_answers.extend(output_texts)
 
     assert len(predicted_answers) == len(gt_answers)
@@ -474,9 +480,8 @@ def validation_generation(model, val_dataset, weights_path=None):
 
 
 def train(model: ClipCaptionModel, train_dataset: ClipCocoDataset,
-          val_dataset: ClipCocoDataset, myconfig,lr: float = 2e-5,
+          val_dataset: ClipCocoDataset, myconfig, lr: float = 2e-5,
           warmup_steps: int = 5000, output_dir: str = ".", model_name: str = ""):
-
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     # test_tokenizer = GPT2Tokenizer.from_pretrained('gpt2')
     if not os.path.exists(output_dir):
@@ -490,7 +495,7 @@ def train(model: ClipCaptionModel, train_dataset: ClipCocoDataset,
     train_dataloader = DataLoader(train_dataset, batch_size=batch_size, shuffle=False, drop_last=False)
     val_dataloader = DataLoader(val_dataset, batch_size=batch_size, shuffle=False, drop_last=False)
 
-    earlystop = EarlyStopping(tolerance=5,delta=0.5)
+    earlystop = EarlyStopping(tolerance=5, delta=0.5)
     scheduler = get_linear_schedule_with_warmup(
         optimizer, num_warmup_steps=warmup_steps, num_training_steps=epochs * len(train_dataloader)
     )
@@ -534,7 +539,7 @@ def train(model: ClipCaptionModel, train_dataset: ClipCocoDataset,
         epoch_avg_val_loss = apply_validation(model, val_dataloader, epoch, prefix_length=val_dataset.prefix_length)
         avg_val_loss.append(epoch_avg_val_loss)
 
-        earlystop(epoch_avg_train_loss,epoch_avg_val_loss)
+        earlystop(epoch_avg_train_loss, epoch_avg_val_loss)
         if earlystop.early_stop:
             print('*** Exit Training due to Early Stopping ( at Epoch {} ) ***'.format(epoch))
             break
@@ -552,8 +557,6 @@ def train(model: ClipCaptionModel, train_dataset: ClipCocoDataset,
                 os.path.join(output_dir, f"{model_name}-{epoch:03d}.pt"),
             )
 
-
-
     fig, axes = plt.subplots(1, figsize=(15, 15))
     plt.plot([e for e in range(epochs)], avg_train_loss, color='b', linestyle='-', label='Training loss')
     plt.plot([e for e in range(epochs)], avg_val_loss, color='r', linestyle='--', label='Validation loss')
@@ -563,6 +566,35 @@ def train(model: ClipCaptionModel, train_dataset: ClipCocoDataset,
     plt.legend()
     plt.savefig('./train_val_loss_{}.png'.format(myconfig.get('model_name')))
     return model
+
+
+def score(ref, hypo):
+    """
+    ref, dictionary of reference sentences (id, sentence)
+    hypo, dictionary of hypothesis sentences (id, sentence)
+    score, dictionary of scores
+    """
+    scorers = [
+        (Bleu(4), ["Bleu_1", "Bleu_2", "Bleu_3", "Bleu_4"]),
+        (Meteor(), "METEOR"),
+        (Rouge(), "ROUGE_L"),
+        (Cider(), "CIDEr")
+    ]
+    final_scores = {}
+    for scorer, method in scorers:
+        score, scores = scorer.compute_score(ref, hypo)
+        if type(score) == list:
+            for m, s in zip(method, score):
+                final_scores[m] = s
+        else:
+            final_scores[method] = score
+    return final_scores
+
+
+def evaluation_metrics(gen, gts):
+    gts = PTBTokenizer.tokenize(gts)
+    gen = PTBTokenizer.tokenize(gen)
+    print(score(gts, gen))
 
 
 def main():
@@ -584,7 +616,7 @@ def main():
         'is_rn': False,
         'normalize_prefix': False,
         'model_name': 'my_coco_vqa_model',
-        'weights_path' : '/home/chris/PycharmProjects/CLIP_prefix_caption/checkpoints/my_coco_vqa_model_bestmodel.pt'
+        'weights_path': '/home/chris/PycharmProjects/CLIP_prefix_caption/checkpoints/my_coco_vqa_model_bestmodel.pt'
 
     }
     print('Logging args **** ' + str(myconfig))
@@ -603,6 +635,7 @@ def main():
     #       model_name=myconfig.get('model_name'))
 
     gen, gts, full_gt_dict = validation_generation(model, val_dataset, weights_path=myconfig.get('weights_path'))
+    evaluation_metrics(gen, gts)
 
 
 if __name__ == '__main__':

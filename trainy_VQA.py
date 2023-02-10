@@ -390,7 +390,7 @@ class EarlyStopping:
                 self.early_stop = True
 
 
-def generate_per_batch(model, prefix, question, batch_size):
+def generate_per_batch(model, prefix, question, batch_size,masky):
     tokens = None
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     tokenizer = GPT2Tokenizer.from_pretrained("gpt2")
@@ -402,10 +402,10 @@ def generate_per_batch(model, prefix, question, batch_size):
     is_stopped = torch.zeros(batch_size, device=device, dtype=torch.bool)
     with torch.no_grad():
         embed = model.clip_project(prefix)
-        embedding_text = model.gpt.transformer.wte(question).unsqueeze(0)
+        embedding_text = model.gpt.transformer.wte(question)
         generated = torch.cat((embed, embedding_text), dim=1)
         for i in range(max_length):
-            outputs = model.gpt(inputs_embeds=generated)
+            outputs = model.gpt(inputs_embeds=generated,attention_mask=masky)
 
             logits = outputs.logits
             logits = logits[:, -1, :] / (temperature if temperature > 0 else 1.0)
@@ -417,6 +417,7 @@ def generate_per_batch(model, prefix, question, batch_size):
                 tokens = torch.cat((tokens, next_tokens), dim=1)
             next_token_embed = model.gpt.transformer.wte(next_tokens)
             generated = torch.cat((generated, next_token_embed), dim=1)
+            masky = torch.cat((masky, torch.ones((batch_size, 1), dtype=torch.float)), dim=1)
 
             seq_lengths[~is_stopped] += 1
             is_stopped = is_stopped + next_tokens.eq(stop_token_index).squeeze() + \
@@ -435,7 +436,7 @@ def validation_generation(model, val_dataset, weights_path=None):
     full_gt_dict = {}
     gen = {}
     gts = {}
-    batch_size = 1
+    batch_size = 4
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     val_dataloader = DataLoader(val_dataset, batch_size=batch_size, shuffle=False, drop_last=False)
     gt_image_ids = val_dataset.image_ids
@@ -450,15 +451,23 @@ def validation_generation(model, val_dataset, weights_path=None):
                                                    desc='Generate Captions/Answers'):
         captions, mask, mask4gpt, prefix = captions.to(device), mask.to(device), mask4gpt.to(device), prefix.to(device,
                                                                                                                 dtype=torch.float32)
-        for b in range(batch_size):
-            new_mask = mask[:, 10:].ge(1)
-            new_mask4gpt = mask4gpt[:, 10:].ge(1)
-            question_mask = torch.logical_xor(new_mask, new_mask4gpt)
-            questions = captions * question_mask
-            question = questions.squeeze()
-            question = question[question.nonzero()].squeeze()
+        temp_question_mask = torch.logical_xor(mask[:, 10:], mask4gpt[:, 10:]).float()
+        masky = torch.cat((torch.ones((batch_size, 10),dtype=torch.float),temp_question_mask), dim=1)
 
-        output_texts = generate_per_batch(model, prefix, question, batch_size)
+        new_mask = mask[:, 10:].ge(1)
+        new_mask4gpt = mask4gpt[:, 10:].ge(1)
+        question_mask = torch.logical_xor(new_mask, new_mask4gpt)
+        questions = captions * question_mask
+
+        # for b in range(batch_size):
+        #     new_mask = mask[:, 10:].ge(1)
+        #     new_mask4gpt = mask4gpt[:, 10:].ge(1)
+        #     question_mask = torch.logical_xor(new_mask, new_mask4gpt)
+        #     questions = captions * question_mask
+        # question = questions.squeeze()
+        # question = question[question.nonzero()].squeeze()
+
+        output_texts = generate_per_batch(model, prefix, questions, batch_size, masky)
         predicted_answers.extend(output_texts)
 
     assert len(predicted_answers) == len(gt_answers)
@@ -601,12 +610,9 @@ def main():
     myconfig = {
         'epochs': 1,
         'batch_size': 1,
-        # './data/coco/oscar_split_ViT-B_32_trainy_vqa_1024.pkl'
-        # '/content/drive/MyDrive/Colab Notebooks/test_data/oscar_split_ViT-B_32_trainy_vqa_1024.pkl'
         'train_data': './data/coco/clip_feat_ViT-B_32_train_vqa.pkl',
         'val_data': '/home/chris/PycharmProjects/CLIP_prefix_caption/data/coco/oscar_split_ViT-B_32_trainy_vqa_1024.pkl',
         'out_dir': './outputdir',
-        # 'prefix': 'coco_prefix',
         'save_every': 1,
         'prefix_length': 10,
         'prefix_length_clip': 10,

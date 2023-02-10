@@ -478,12 +478,6 @@ def generate2(
                 embedding_text = model.gpt.transformer.wte(tok_q).unsqueeze(0)
                 generated = torch.cat((embed, embedding_text), dim=1)
 
-                # execute clip project with prefix!!
-                # tranform to   --> 1 x 10 x 768 (self.gpt_embedding_size 768)
-                # prefix_projections = self.clip_project(prefix).view(-1, self.prefix_length, self.gpt_embedding_size)
-                # kanoume concatenate ta prefix_projections & embedding_text
-                # concat 1 x 40 x 768
-                # embedding_cat = torch.cat((prefix_projections, embedding_text), dim=1)
 
             else:
                 if tokens is None:
@@ -553,10 +547,10 @@ class Predictor():
 
     def predict(self, image_path,question, use_beam_search):
         """Run a single prediction on the model"""
-        print('Running a VQA prediction')
-        print('Image path ' + str(image_path))
-        print('Question '+str(question))
-        print('Beam search is set to ' + str(use_beam_search))
+        # print('Running a VQA prediction')
+        # print('Image path ' + str(image_path))
+        # print('Question '+str(question))
+        # print('Beam search is set to ' + str(use_beam_search))
         image = io.imread(image_path)
         model = self.model
         pil_image = PIL.Image.fromarray(image)
@@ -574,24 +568,30 @@ class Predictor():
 
 
 if __name__ == '__main__':
-    mypredictor = Predictor(weights_path='checkpoints/my_coco_vqa_model_bestmodel.pt')
-    # Images/COCO_val2014_000000060623.jpg
-    # Images/COCO_val2014_000000165547.jpg
-    # Images/COCO_val2014_000000354533.jpg
-    # Images/COCO_val2014_000000562207.jpg
-    # Images/COCO_val2014_000000386164.jpg
-    # Images/CONCEPTUAL_02.jpg
-    # Images/CONCEPTUAL_04.jpg
+
+    # temp_path  = '/home/chris/PycharmProjects/CLIP_prefix_caption/checkpoints/coco_prefix-009_iarai.pt'
+    temp_path  = 'checkpoints/my_coco_ic_model_bestmodel.pt'
+    mypredictor = Predictor(weights_path=temp_path)
     temp_dict = [
-        {'question':'What is she doing?','image_path':'Images/COCO_val2014_000000060623.jpg'},
+        {'question': 'What is she doing?','image_path':'Images/COCO_val2014_000000060623.jpg'},
         {'question': 'Does someone have a birthday?', 'image_path': 'Images/COCO_val2014_000000060623.jpg'},
         {'question': 'What color is her hair?', 'image_path': 'Images/COCO_val2014_000000060623.jpg'},
         {'question': 'What is she doing?', 'image_path': 'Images/COCO_val2014_000000060623.jpg'},
         {'question': 'Is the bike in motion?', 'image_path': 'Images/COCO_val2014_000000354533.jpg'},
         {'question': 'How many bikes?', 'image_path': 'Images/COCO_val2014_000000354533.jpg'},
-        {'question': 'Where is he looking?', 'image_path': 'Images/262148.jpg'}, #down -looking  // at? - skateboard
-        {'question': 'What are the people in the background doing?', 'image_path': 'Images/262148.jpg'} #skateboarding - watching
+        {'question': 'Where is he looking?', 'image_path': 'Images/262148.jpg'},
+        {'question': 'What are the people in the background doing?', 'image_path': 'Images/262148.jpg'} ,
+        {'question': 'Is it daylight in this picture?', 'image_path': 'Images/COCO_val2014_000000240301.jpg'},
+        {'question': 'Why is the cow laying down?', 'image_path': 'Images/COCO_val2014_000000240301.jpg'}
+
     ]
-    tempy = temp_dict[-1]
-    output = mypredictor.predict(image_path=tempy.get('image_path'),question=tempy.get('question'), use_beam_search=False)
-    print(output)
+    fl = []
+    for tempy in temp_dict:
+    # tempy = temp_dict[-1]
+        output = mypredictor.predict(image_path=tempy.get('image_path'),question=tempy.get('question'), use_beam_search=False)
+        # print(output)
+        fl.append(output)
+    print(fl)
+
+    # VQA [' eating', ' yes', ' brown', ' eating', ' yes', ' 1', ' at skate park', ' skateboarding', ' yes', ' to feed']
+    # IC [' \n\nWhat is she doing? \n\nWhat is she doing? \n\nWhat is she doing? \n\nWhat is she doing? \n\nWhat is she doing? \n\nWhat is she doing? \n\nWhat is she doing? \n\nWhat is she doing? \n\n', '   from the movie?                                                             ', '  \n                                                                ', ' \n\nWhat is she doing? \n\nWhat is she doing? \n\nWhat is she doing? \n\nWhat is she doing? \n\nWhat is she doing? \n\nWhat is she doing? \n\nWhat is she doing? \n\nWhat is she doing? \n\n', '                                                                   ', '                                                                   ', '                                                                   ', '                                                                   ', '                                                                   ', '                                                                   ']

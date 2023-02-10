@@ -14,7 +14,12 @@ import numpy as np
 from typing import Tuple, Optional, Union
 import matplotlib.pyplot as plt
 import copy
-
+from evaluation.bleu.bleu import Bleu
+from evaluation.rouge.rouge import Rouge
+from evaluation.cider.cider import Cider
+from evaluation.meteor.meteor import Meteor
+from evaluation.tokenizer.ptbtokenizer import PTBTokenizer
+import time
 
 class MappingType(Enum):
     MLP = 'mlp'
@@ -52,7 +57,7 @@ class ClipCocoDataset(Dataset):
         # tokenized caption, mask attention , (prefix --> actual image)
         return tokens, mask, prefix
 
-    def __init__(self, data_path: str,  prefix_length: int, gpt2_type: str = "gpt2",
+    def __init__(self, data_path: str, prefix_length: int, gpt2_type: str = "gpt2",
                  normalize_prefix=False):
         self.tokenizer = GPT2Tokenizer.from_pretrained(gpt2_type)
         self.prefix_length = prefix_length
@@ -247,19 +252,9 @@ class ClipCaptionModel(nn.Module):
     def forward(self, tokens: torch.Tensor, prefix: torch.Tensor, mask: Optional[torch.Tensor] = None,
                 labels: Optional[torch.Tensor] = None):
 
-        # ta tokens twn captions - prefix clip embedings (img)  -  maska
-
-        # size of tokens --> 1 x 30
-        # size word embe of gpt ---> 1 x 30 x 768
         embedding_text = self.gpt.transformer.wte(tokens)
-
-        # execute clip project with prefix!!
-        # tranform to   --> 1 x 10 x 768 (self.gpt_embedding_size 768)
         prefix_projections = self.clip_project(prefix).view(-1, self.prefix_length, self.gpt_embedding_size)
-        # kanoume concatenate ta prefix_projections & embedding_text
-        # concat 1 x 40 x 768
         embedding_cat = torch.cat((prefix_projections, embedding_text), dim=1)
-        # TODO
         out = self.gpt(inputs_embeds=embedding_cat, labels=None, attention_mask=mask)
         return out
 
@@ -325,7 +320,7 @@ def apply_validation(model, val_dataloader, epoch, prefix_length):
     val_loss = 0
     model.eval()
     for idx, (tokens, mask, prefix) in enumerate(val_dataloader):
-        tokens, mask, prefix = tokens.to(device), mask.to(device), prefix.to(device,dtype=torch.float32)
+        tokens, mask, prefix = tokens.to(device), mask.to(device), prefix.to(device, dtype=torch.float32)
         with torch.no_grad():
             outputs = model(tokens, prefix, mask)
             logits = outputs.logits[:, prefix_length - 1: -1]
@@ -357,9 +352,8 @@ class EarlyStopping:
 
 
 def train(model: ClipCaptionModel, train_dataset: ClipCocoDataset,
-          val_dataset: ClipCocoDataset, myconfig,lr: float = 2e-5,
+          val_dataset: ClipCocoDataset, myconfig, lr: float = 2e-5,
           warmup_steps: int = 5000, output_dir: str = ".", model_name: str = ""):
-
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     # test_tokenizer = GPT2Tokenizer.from_pretrained('gpt2')
     if not os.path.exists(output_dir):
@@ -389,7 +383,7 @@ def train(model: ClipCaptionModel, train_dataset: ClipCocoDataset,
         for idx, (tokens, mask, prefix) in enumerate(train_dataloader):
             model.train()
             model.zero_grad()
-            tokens, mask, prefix = tokens.to(device), mask.to(device), prefix.to(device,dtype=torch.float32)
+            tokens, mask, prefix = tokens.to(device), mask.to(device), prefix.to(device, dtype=torch.float32)
 
             outputs = model(tokens, prefix, mask)
             logits = outputs.logits[:, train_dataset.prefix_length - 1: -1]
@@ -440,16 +434,167 @@ def train(model: ClipCaptionModel, train_dataset: ClipCocoDataset,
     return model
 
 
+def generate_topk(
+        model,
+        tokenizer,
+        tokens=None,
+        prompt=None,
+        embed=None,
+        entry_count=1,
+        entry_length=67,  # maximum number of words
+        top_p=0.8,
+        temperature=1.0,
+        stop_token: str = ".",
+):
+    stop_token_index = tokenizer.encode(stop_token)[0]
+    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+    batch_size = embed.shape[0]
+    eos_token_index = tokenizer.eos_token_id
+    seq_lengths = torch.ones(batch_size, device=device)
+    is_stopped = torch.zeros(batch_size, device=device, dtype=torch.bool)
+    with torch.no_grad():
+        for entry_idx in range(entry_count):
+            if embed is not None:
+                generated = embed
+            else:
+                if tokens is None:
+                    tokens = torch.tensor(tokenizer.encode(prompt))
+                    tokens = tokens.unsqueeze(0).to(device)
+
+                generated = model.gpt.transformer.wte(tokens)
+            for i in range(entry_length):
+                outputs = model.gpt(inputs_embeds=generated)
+                logits = outputs.logits
+                logits = logits[:, -1, :] / (temperature if temperature > 0 else 1.0)
+                logits = logits.softmax(-1).log()
+                scores, next_tokens = logits.topk(1, -1)
+                if tokens is None:
+                    tokens = next_tokens
+                else:
+                    tokens = torch.cat((tokens, next_tokens), dim=1)
+                next_token_embed = model.gpt.transformer.wte(next_tokens)
+                generated = torch.cat((generated, next_token_embed), dim=1)
+
+                seq_lengths[~is_stopped] += 1
+                is_stopped = is_stopped + next_tokens.eq(stop_token_index).squeeze() + \
+                             next_tokens.eq(eos_token_index).squeeze()
+                if is_stopped.all():
+                    break
+
+            output_list = tokens.cpu().numpy()
+            output_texts = [
+                tokenizer.decode(output[: int(length)], skip_special_tokens=True)
+                for output, length in zip(output_list, seq_lengths)
+            ]
+    return output_texts
+
+
+def merge(list1, list2):
+    assert len(list1) == len(list2)
+    merged_list = [(list1[i], list2[i]) for i in range(0, len(list1))]
+    return merged_list
+
+
+def group_reference_captions(gt_image_ids, gt_captions):
+    mrg = merge(gt_image_ids, gt_captions)
+    temp_dict = {}
+    for key, value in mrg:
+        if key in temp_dict:
+            temp_dict[key].append(value)
+        else:
+            temp_dict[key] = [value]
+    return temp_dict
+
+
+def validation_generation(model, val_dataset, batch_size, weights_path=None):
+    start_time = time.time()
+    full_gt_dict = {}
+    gen = {}
+    gts = {}
+    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+    val_dataloader = DataLoader(val_dataset, batch_size=batch_size, shuffle=False, drop_last=False)
+    tokenizer = GPT2Tokenizer.from_pretrained("gpt2")
+    generated_captions = []
+
+    gt_image_ids = val_dataset.image_ids
+    gt_captions = val_dataset.captions
+    group_dict = group_reference_captions(gt_image_ids, gt_captions)
+
+    model.load_state_dict(torch.load(weights_path, map_location=device))
+    model = model.to(device)
+    model.eval()
+
+    for (captions, mask, prefix) in tqdm(val_dataloader, total=len(val_dataloader), desc='Generate Captions'):
+        captions, mask, prefix = captions.to(device), mask.to(device), prefix.to(device, dtype=torch.float32)
+
+        with torch.no_grad():
+            prefix_embed = model.clip_project(prefix)
+            output = generate_topk(model, tokenizer, embed=prefix_embed)
+            generated_captions.extend(output)
+
+    assert len(generated_captions) == len(gt_captions)
+
+    for i, (pred_a, gt_a) in enumerate(zip(generated_captions, gt_captions)):
+        gen[str(i)] = pred_a
+        gts[str(i)] = gt_a
+        full_gt_dict[str(i)] = {'image_id': gt_image_ids[i],
+                                'original_caption': gt_captions[i],
+                                'generated_caption': pred_a,
+                                'reference_captions': group_dict.get(gt_image_ids[i])
+                                }
+
+    with open("./full_gt_dict.json", "w") as outfile:
+        json.dump(full_gt_dict, outfile)
+
+    end_time = time.time()
+    total = round((end_time - start_time) / 60, 2)
+    print('*** The Validation is finished in {} minutes ***'.format(total))
+    return gen, gts, full_gt_dict
+
+
+def score(ref, hypo):
+    """
+    ref, dictionary of reference sentences (id, sentence)
+    hypo, dictionary of hypothesis sentences (id, sentence)
+    score, dictionary of scores
+    """
+    scorers = [
+        (Bleu(4), ["Bleu_1", "Bleu_2", "Bleu_3", "Bleu_4"]),
+        (Meteor(), "METEOR"),
+        (Rouge(), "ROUGE_L"),
+        (Cider(), "CIDEr")
+    ]
+    final_scores = {}
+    for scorer, method in scorers:
+        score, scores = scorer.compute_score(ref, hypo)
+        if type(score) == list:
+            for m, s in zip(method, score):
+                final_scores[m] = s
+        else:
+            final_scores[method] = score
+    return final_scores
+
+
+def evaluation_metrics(gen, gts):
+    print('*** Calculating Evaluation Metrics ***')
+    start_time = time.time()
+
+    gts = PTBTokenizer.tokenize(gts)
+    gen = PTBTokenizer.tokenize(gen)
+    print(score(gts, gen))
+    print()
+    end_time = time.time()
+
+    total = round((end_time - start_time) / 60, 2)
+    print('*** The Validation is finished in {} minutes ***'.format(total))
+
 def main():
     myconfig = {
         'epochs': 1,
         'batch_size': 32,
-        # './data/coco/oscar_split_ViT-B_32_trainy_vqa_1024.pkl'
-        # '/content/drive/MyDrive/Colab Notebooks/test_data/oscar_split_ViT-B_32_trainy_vqa_1024.pkl'
         'train_data': '/content/clipcap/data/coco/clip_feat_ViT-B_32_train_ic.pkl',
-        'val_data': '/content/clipcap/data/coco/clip_feat_ViT-B_32_val_ic.pkl',
+        'val_data': '/home/chris/PycharmProjects/CLIP_prefix_caption/data/coco/oscar_split_ViT-B_32_trainy.pkl',
         'out_dir': './outputdir',
-        # 'prefix': 'coco_prefix',
         'save_every': 1,
         'prefix_length': 10,
         'prefix_length_clip': 10,
@@ -458,24 +603,28 @@ def main():
         'num_layers': 8,
         'is_rn': False,
         'normalize_prefix': False,
-        'model_name': 'my_coco_ic_model'
+        'model_name': 'my_coco_ic_model',
+        'weights_path': '/home/chris/PycharmProjects/CLIP_prefix_caption/checkpoints/my_coco_vqa_model_bestmodel.pt'
 
     }
     print('Logging args **** ' + str(myconfig))
     prefix_dim = 640 if myconfig.get('is_rn') else 512
     print()
-    train_dataset = ClipCocoDataset(myconfig.get('train_data'), myconfig.get('prefix_length'),
-                                    normalize_prefix=myconfig.get('normalize_prefix'))
+    # train_dataset = ClipCocoDataset(myconfig.get('train_data'), myconfig.get('prefix_length'),
+    #                                 normalize_prefix=myconfig.get('normalize_prefix'))
     val_dataset = ClipCocoDataset(myconfig.get('val_data'), myconfig.get('prefix_length'),
                                   normalize_prefix=myconfig.get('normalize_prefix'))
     mapping_type = {'mlp': MappingType.MLP, 'transformer': MappingType.Transformer}[myconfig.get('mapping_type')]
     print()
-    # TODO CHECK DIFFERENCE prefix_length - prefix_length_clip
     model = ClipCaptionPrefix(myconfig.get('prefix_length'), clip_length=myconfig.get('prefix_length_clip'),
                               prefix_size=prefix_dim, num_layers=myconfig.get('num_layers'),
                               mapping_type=mapping_type)
-    train(model, train_dataset, val_dataset, myconfig, output_dir=myconfig.get('out_dir'),
-          model_name=myconfig.get('model_name'))
+    # train(model, train_dataset, val_dataset, myconfig, output_dir=myconfig.get('out_dir'),
+    #       model_name=myconfig.get('model_name'))
+
+    gen, gts, full_gt_dict = validation_generation(model, val_dataset, batch_size=64,
+                                                   weights_path=myconfig.get('weights_path'))
+    evaluation_metrics(gen, gts)
 
 
 if __name__ == '__main__':

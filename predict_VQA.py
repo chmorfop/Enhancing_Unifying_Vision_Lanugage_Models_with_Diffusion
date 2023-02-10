@@ -532,25 +532,17 @@ class Predictor():
             "ViT-B/32", device=self.device, jit=False
         )
         self.tokenizer = GPT2Tokenizer.from_pretrained("gpt2")
-
-        #self.models = {}
         self.prefix_length = 10
         mapping_type = {'mlp': MappingType.MLP, 'transformer': MappingType.Transformer}['transformer']
-        #model = ClipCaptionModel(self.prefix_length,)
-        model = ClipCaptionPrefix(self.prefix_length, clip_length = 10, prefix_size = 512,
-        num_layers = 8, mapping_type = mapping_type)
+        model = ClipCaptionPrefix(self.prefix_length, clip_length = 10,
+                                  prefix_size = 512, num_layers = 8, mapping_type = mapping_type)
         model.load_state_dict(torch.load(weights_path, map_location=CPU))
         model = model.eval()
         model = model.to(self.device)
         self.model = model
 
-
     def predict(self, image_path,question, use_beam_search):
         """Run a single prediction on the model"""
-        # print('Running a VQA prediction')
-        # print('Image path ' + str(image_path))
-        # print('Question '+str(question))
-        # print('Beam search is set to ' + str(use_beam_search))
         image = io.imread(image_path)
         model = self.model
         pil_image = PIL.Image.fromarray(image)

@@ -245,11 +245,92 @@ import torch
 # print(array)
 
 
-import torch
+# import torch
+#
+# basic_tensor = torch.randn(3, 50257)
+# boolean_tensor = (basic_tensor > 0).to(torch.float)
+# print(boolean_tensor)
+# masked_tensor = torch.masked_select(basic_tensor, boolean_tensor.bool())
+# masked_tensor = masked_tensor.reshape( -1)
+# print(masked_tensor)
 
-basic_tensor = torch.randn(3, 50257)
-boolean_tensor = (basic_tensor > 0).to(torch.float)
-print(boolean_tensor)
-masked_tensor = torch.masked_select(basic_tensor, boolean_tensor.bool())
-masked_tensor = masked_tensor.reshape( -1)
-print(masked_tensor)
+gg = [203564, 179765, 322141, 16977, 106140, 106140, 322141, 322141, 322141, 203564, 179765, 16977, 106140, 322141, 571635, 301837, 190236, 315702, 331352, 517069, 315702, 189634, 472598, 162113, 203564, 179765, 331352, 126657, 285421, 16977]
+zz = ['A bicycle replica with a clock as the front wheel.', 'A black Honda motorcycle parked in front of a garage.', 'A room with blue walls and a white sink and door.', 'A car that seems to be parked illegally behind a legally parked car', 'A large passenger airplane flying through the air.', 'There is a GOL plane taking off in a partly cloudy sky.', 'Blue and white color scheme in a small bathroom.', 'This is a blue and white bathroom with a wall sink and a lifesaver on the wall.', 'A blue boat themed bathroom with a life preserver on the wall', 'The bike has a clock as a tire.', 'A Honda motorcycle parked in a grass driveway', 'two cars parked on the sidewalk on the street', 'An airplane that is, either, landing or just taking off.', 'A bathroom with walls that are painted baby blue.', 'A bathroom with a toilet, sink, and shower.', 'A long empty, minimal modern skylit home kitchen.', 'An office cubicle with four different types of computers.', 'A bathroom sink with toiletries on the counter.', 'A small closed toilet in a cramped space.', 'Two women waiting at a bench next to a street.', 'A bathroom sink and various personal hygiene items.', 'This is an open box containing four cucumbers.', 'An old-fashioned green station wagon is parked on a shady driveway.', 'A gas stove next to a stainless steel kitchen sink and countertop.', 'A black metal bicycle with a clock inside the front wheel.', 'A black Honda motorcycle with a dark burgundy seat.', 'A tan toilet and sink combination in a small room.', 'Several motorcycles riding down the road in formation.', 'A black cat is inside a white toilet.', 'City street with parked cars and a bench.']
+
+
+def merge(list1, list2):
+    assert len(list1) == len(list2)
+    merged_list = [(list1[i], list2[i]) for i in range(0, len(list1))]
+    return merged_list
+
+mrg = merge(gg, zz)
+
+
+temp_dict = {}
+for key, value in mrg:
+    if key in temp_dict:
+        temp_dict[key].append(value)
+    else:
+        temp_dict[key] = [value]
+
+print(temp_dict)
+
+from itertools import groupby
+
+
+# final_dict = {}
+# for key, group in groupby(mrg, lambda x: x[0]):
+#     final_dict[key] = [g[1] for g in group]
+#
+#     # key_and_group = {key: list(g[1] for g in group)}
+#     # for g in group:
+#     #     print(type(g))
+#     #     print(g[1])
+#     # print()
+# print(final_dict)
+
+# from itertools import groupby
+#
+# data = [(1, "A"), (2, "B"), (1, "C"), (2, "D"), (3, "E")]
+#
+# result = {}
+# for key, items in groupby(data, key=lambda x: x[0]):
+#     result[key] = [item[1] for item in items]
+#
+# print(result)
+
+# from itertools import groupby
+#
+# data = [("dog", "brown"), ("cat", "black"), ("dog", "white"),
+#         ("bird", "yellow"), ("cat", "grey"), ("bird", "red")]
+#
+# result = {}
+# for key, items in groupby(data, key=lambda x: x[0]):
+#     result[key] = [item[1] for item in items]
+#
+# print(result)
+
+
+from itertools import groupby
+
+# data = [("dog", "brown"), ("cat", "black"), ("dog", "white"),
+#         ("bird", "yellow"), ("cat", "grey"), ("bird", "red")]
+#
+# temp_dict = {}
+# for key, value in data:
+#     if key in temp_dict:
+#         temp_dict[key].append(value)
+#     else:
+#         temp_dict[key] = [value]
+#
+# print(temp_dict)
+# result = {key: values for key, values in temp_dict.items()}
+#
+# print(result)
+
+import time
+start_time = time.time()
+time.sleep(4)
+end_time = time.time()
+total = round((end_time - start_time)/60,2)
+print(total)

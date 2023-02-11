@@ -558,12 +558,128 @@ class Predictor():
         else:
             return generate2(model, self.tokenizer,question = question, embed=prefix_embed)
 
+    def generate_per_batch(self, batch_size, masky):
+        tokens = None
+        device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+        tokenizer = GPT2Tokenizer.from_pretrained("gpt2")
+        stop_token_index = tokenizer.encode('.')[0]
+        eos_token_index = tokenizer.eos_token_id
+        max_length = 67
+        temperature = 1.0
+        seq_lengths = torch.ones(batch_size, device=device)
+        is_stopped = torch.zeros(batch_size, device=device, dtype=torch.bool)
+        with torch.no_grad():
+            for i in range(max_length):
+                outputs = self.model.gpt(inputs_embeds=generated, attention_mask=masky)
+
+                logits = outputs.logits
+                logits = logits[:, -1, :] / (temperature if temperature > 0 else 1.0)
+                logits = logits.softmax(-1).log()
+                scores, next_tokens = logits.topk(1, -1)
+                if tokens is None:
+                    tokens = next_tokens
+                else:
+                    tokens = torch.cat((tokens, next_tokens), dim=1)
+                next_token_embed = self.model.gpt.transformer.wte(next_tokens)
+                generated = torch.cat((generated, next_token_embed), dim=1)
+                masky = torch.cat((masky, torch.ones((batch_size, 1), dtype=torch.float)), dim=1)
+
+                seq_lengths[~is_stopped] += 1
+                is_stopped = is_stopped + next_tokens.eq(stop_token_index).squeeze() + \
+                             next_tokens.eq(eos_token_index).squeeze()
+                if is_stopped.all():
+                    break
+
+            output_list = tokens.cpu().numpy()
+            output_texts = [
+                tokenizer.decode(output[: int(length)], skip_special_tokens=True)
+                for output, length in zip(output_list, seq_lengths)]
+        return output_texts
+    def custom_padding(self,q):
+        max_len = 22
+        padding = max_len - q.shape[0]
+        if padding > 0:
+            tokens = torch.cat((q, torch.zeros(padding, dtype=torch.int64) - 1))
+        elif padding < 0:
+            tokens = q[:max_len]
+        q_range = q.shape[0]
+        rest_range = max_len - q_range
+        if rest_range >= 0:
+            need_pred = q_range * [1] + rest_range * [0]
+
+        omask = tokens.ge(0)  # mask is zero where we out of sequence
+        tokens[~omask] = 0
+        mask = torch.FloatTensor(need_pred)
+        mask = torch.cat((torch.ones(self.prefix_length), mask), dim=0)
+        return tokens.unsqueeze(0), mask.unsqueeze(0)
+    def predict_batch_images(self,images,questions):
+
+        temperature = 1.0
+        seq_lengths = torch.ones(12, device=self.device)
+        is_stopped = torch.zeros(12, device=self.device, dtype=torch.bool)
+        stop_token_index = self.tokenizer.encode('.')[0]
+        eos_token_index = self.tokenizer.eos_token_id
+
+        model = self.model
+        gather_images = []
+        for t in images:
+            image = io.imread(t)
+            pil_image = PIL.Image.fromarray(image)
+            gather_images.append(self.preprocess(pil_image).unsqueeze(0).to(self.device))
+        images = torch.cat(gather_images, dim=0)
+
+        questions_list = []
+        tokens_list = []
+        mask_list = []
+        eos = self.tokenizer.eos_token_id
+        for q in questions:
+            questions_list.append(torch.tensor(self.tokenizer.encode(q) + [eos]))
+        for q in questions_list:
+            tokens, mask = self.custom_padding(q)
+            tokens_list.append(tokens)
+            mask_list.append(mask)
+
+        tokens = None
+        temp_questions = torch.cat(tokens_list, dim=0)
+        temp_qmasks = torch.cat(mask_list, dim=0)
+        prefix = self.clip_model.encode_image(images).to(self.device, dtype=torch.float32)
+        prefix_embed = model.clip_project(prefix)
+        embedding_text = model.gpt.transformer.wte(temp_questions)
+        generated = torch.cat((prefix_embed, embedding_text), dim=1)
+        with torch.no_grad():
+            for i in range(30):
+                outputs = model.gpt(inputs_embeds=generated,attention_mask=temp_qmasks)
+                logits = outputs.logits
+                logits = logits[:, -1, :]
+                logits = logits.softmax(-1).log()
+                scores, next_tokens = logits.topk(1, -1)
+                if tokens is None:
+                    tokens = next_tokens
+                else:
+                    tokens = torch.cat((tokens, next_tokens), dim=1)
+                next_token_embed = model.gpt.transformer.wte(next_tokens)
+                generated = torch.cat((generated, next_token_embed), dim=1)
+                temp_qmasks = torch.cat((temp_qmasks, torch.ones((12, 1), dtype=torch.float)), dim=1)
+
+                seq_lengths[~is_stopped] += 1
+                is_stopped = is_stopped + next_tokens.eq(stop_token_index).squeeze() \
+                             + next_tokens.eq(eos_token_index).squeeze()
+                if is_stopped.all():
+                    break
+
+            output_list = tokens.cpu().numpy()
+            output_texts = [
+                self.tokenizer.decode(output[: int(length)], skip_special_tokens=True)
+                for output, length in zip(output_list, seq_lengths)]
+        return output_texts
+
+
 
 if __name__ == '__main__':
 
-    # temp_path  = '/home/chris/PycharmProjects/CLIP_prefix_caption/checkpoints/coco_prefix-009_iarai.pt'
-    temp_path  = 'checkpoints/my_coco_ic_model_bestmodel.pt'
+    temp_path  = 'checkpoints/my_coco_vqa_model_bestmodel.pt'
     mypredictor = Predictor(weights_path=temp_path)
+
     temp_dict = [
         {'question': 'What is she doing?','image_path':'Images/COCO_val2014_000000060623.jpg'},
         {'question': 'Does someone have a birthday?', 'image_path': 'Images/COCO_val2014_000000060623.jpg'},
@@ -571,19 +687,53 @@ if __name__ == '__main__':
         {'question': 'What is she doing?', 'image_path': 'Images/COCO_val2014_000000060623.jpg'},
         {'question': 'Is the bike in motion?', 'image_path': 'Images/COCO_val2014_000000354533.jpg'},
         {'question': 'How many bikes?', 'image_path': 'Images/COCO_val2014_000000354533.jpg'},
-        {'question': 'Where is he looking?', 'image_path': 'Images/262148.jpg'},
-        {'question': 'What are the people in the background doing?', 'image_path': 'Images/262148.jpg'} ,
+        {'question': 'Where is he looking?', 'image_path': 'Images/COCO_val2014_000000262148.jpg'},
+        {'question': 'What are the people in the background doing?', 'image_path': 'Images/COCO_val2014_000000262148.jpg'} ,
         {'question': 'Is it daylight in this picture?', 'image_path': 'Images/COCO_val2014_000000240301.jpg'},
         {'question': 'Why is the cow laying down?', 'image_path': 'Images/COCO_val2014_000000240301.jpg'}
 
     ]
-    fl = []
-    for tempy in temp_dict:
+
+    twelve_val_dict = [
+        {'question': 'Where is he looking?', 'answer': 'down', 'image_path': 'Images/COCO_val2014_000000262148.jpg'},
+        {'question': 'What are the people in the background doing?', 'answer': 'watching', 'image_path': 'Images/COCO_val2014_000000262148.jpg'},
+        {'question': 'What is he on top of?', 'answer': 'picnic table', 'image_path': 'Images/COCO_val2014_000000262148.jpg'},
+        {'question': 'What website copyrighted the picture?', 'answer': 'foodiebakercom', 'image_path': 'Images/COCO_val2014_000000393225.jpg'},
+        {'question': 'Is this a creamy soup?', 'answer': 'no', 'image_path': 'Images/COCO_val2014_000000393225.jpg'},
+        {'question': 'Is this rice noodle soup?', 'answer': 'yes', 'image_path': 'Images/COCO_val2014_000000393225.jpg'},
+        {'question': 'What is to the right of the soup?', 'answer': 'chopsticks', 'image_path': 'Images/COCO_val2014_000000393225.jpg'},
+        {'question': 'What is the man doing in the street?', 'answer': 'walking', 'image_path': 'Images/COCO_val2014_000000393226.jpg'},
+        {'question': "How many photo's can you see?", 'answer': '1', 'image_path': 'Images/COCO_val2014_000000393226.jpg'},
+        {'question': 'What does the truck on the left sell?', 'answer': 'ice cream', 'image_path': 'Images/COCO_val2014_000000393226.jpg'},
+        {'question': 'Why is there a gap between the roof and wall?', 'answer': 'yes', 'image_path': 'Images/COCO_val2014_000000240301.jpg'},
+        {'question': 'Is it daylight in this picture?', 'answer': 'yes', 'image_path': 'Images/COCO_val2014_000000240301.jpg'},
+    ]
+
+
+    # for tempy in twelve_val_dict:
+    #     output = mypredictor.predict(image_path=tempy.get('image_path'),question=tempy.get('question'), use_beam_search=False)
+    #     print('For question : \"{}\" and original answer : \"{}\" ,the generated answer : \"{}\" '.format(
+    #                                                                                         tempy.get('question'),
+    #                                                                                         tempy.get('answer'),
+    #                                                                                         output))
+    #     print()
+
+    im_list = []
+    q_list = []
+    for tempy in twelve_val_dict:
+        im_list.append(tempy.get('image_path'))
+        q_list.append(tempy.get('question'))
+
+    out = mypredictor.predict_batch_images(images=im_list, questions=q_list)
+    print(out)
+
+
+
+
     # tempy = temp_dict[-1]
-        output = mypredictor.predict(image_path=tempy.get('image_path'),question=tempy.get('question'), use_beam_search=False)
-        # print(output)
-        fl.append(output)
-    print(fl)
+    # output = mypredictor.predict(image_path=tempy.get('image_path'), question=tempy.get('question'),
+    #                              use_beam_search=False)
+    # print(output)
 
     # VQA [' eating', ' yes', ' brown', ' eating', ' yes', ' 1', ' at skate park', ' skateboarding', ' yes', ' to feed']
     # IC [' \n\nWhat is she doing? \n\nWhat is she doing? \n\nWhat is she doing? \n\nWhat is she doing? \n\nWhat is she doing? \n\nWhat is she doing? \n\nWhat is she doing? \n\nWhat is she doing? \n\n', '   from the movie?                                                             ', '  \n                                                                ', ' \n\nWhat is she doing? \n\nWhat is she doing? \n\nWhat is she doing? \n\nWhat is she doing? \n\nWhat is she doing? \n\nWhat is she doing? \n\nWhat is she doing? \n\nWhat is she doing? \n\n', '                                                                   ', '                                                                   ', '                                                                   ', '                                                                   ', '                                                                   ', '                                                                   ']

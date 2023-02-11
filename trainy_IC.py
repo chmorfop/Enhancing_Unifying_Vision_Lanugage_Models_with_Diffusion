@@ -441,7 +441,7 @@ def generate_topk(
         prompt=None,
         embed=None,
         entry_count=1,
-        entry_length=67,  # maximum number of words
+        entry_length=30,  # maximum number of words
         top_p=0.8,
         temperature=1.0,
         stop_token: str = ".",
@@ -622,7 +622,7 @@ def main():
     # train(model, train_dataset, val_dataset, myconfig, output_dir=myconfig.get('out_dir'),
     #       model_name=myconfig.get('model_name'))
 
-    gen, gts, full_gt_dict = validation_generation(model, val_dataset, batch_size=64,
+    gen, gts, full_gt_dict = validation_generation(model, val_dataset, batch_size=32,
                                                    weights_path=myconfig.get('weights_path'))
     evaluation_metrics(gen, gts)
 

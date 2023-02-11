@@ -535,15 +535,15 @@ def validation_generation(model, val_dataset, batch_size, weights_path=None):
     assert len(generated_captions) == len(gt_captions)
 
     for i, (pred_a, gt_a) in enumerate(zip(generated_captions, gt_captions)):
-        gen[str(i)] = pred_a
-        gts[str(i)] = gt_a
+        gen[str(i)] = [pred_a]
+        gts[str(i)] = [gt_a]
         full_gt_dict[str(i)] = {'image_id': gt_image_ids[i],
                                 'original_caption': gt_captions[i],
                                 'generated_caption': pred_a,
                                 'reference_captions': group_dict.get(gt_image_ids[i])
                                 }
 
-    with open("./full_gt_dict.json", "w") as outfile:
+    with open("./full_gt_dict_ic.json", "w") as outfile:
         json.dump(full_gt_dict, outfile)
 
     end_time = time.time()

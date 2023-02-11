@@ -15,7 +15,7 @@ import skimage.io as io
 import PIL.Image
 import numpy as np
 import clip
-
+import time
 
 CPU = torch.device("cpu")
 
@@ -488,7 +488,6 @@ def generate2(
     question = ''
 ):
     model.eval()
-    generated_num = 0
     generated_list = []
     # allo token index for . kai allo for EOS // tokenizer.eos_token_id
     stop_token_index = tokenizer.encode(stop_token)[0]
@@ -542,7 +541,7 @@ def generate2(
                 if (stop_token_index == next_token.item() ) or eos_token_index == next_token.item() :
                     break
 
-            output_list = list(tokens.squeeze().gpu().numpy())
+            output_list = list(tokens.squeeze().cpu().numpy())
             output_text = tokenizer.decode(output_list,skip_special_tokens=True)
             generated_list.append(output_text)
 
@@ -713,8 +712,15 @@ class Predictor():
 
 if __name__ == '__main__':
 
+    gen = {}
+    gts = {}
+    full_gt_dict = {}
+    start_time = time.time()
+
+    # todo
     temp_path  = 'checkpoints/my_coco_vqa_model_bestmodel.pt'
     mypredictor = Predictor(weights_path=temp_path)
+    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
     # todo
     val_dataset = ClipCocoDataset('/home/chris/PycharmProjects/CLIP_prefix_caption/data/coco/oscar_split_ViT-B_32_trainy_vqa_1024.pkl',
@@ -723,21 +729,26 @@ if __name__ == '__main__':
     ans = val_dataset.answers
     im = val_dataset.prefixes
     imid = val_dataset.image_ids
-    gen = {}
-    gts = {}
-    full_gt_dict = {}
-    qs = qs[:10]
+
     for i,val in tqdm(enumerate(qs),total=len(qs)):
-        output = mypredictor.predict_fast(prefix=im[i].unsqueeze(0),question=qs[i], use_beam_search=False)
-        gen[str(i)] = output
-        gts[str(i)] = ans[i]
+        temp = im[i].to(device, dtype=torch.float32)
+        output = mypredictor.predict_fast(prefix=temp.unsqueeze(0),
+                                          question=qs[i],
+                                          use_beam_search=False)
+        gen[str(i)] = [output]
+        gts[str(i)] = [ans[i]]
         full_gt_dict[str(i)] = {'image_id': imid[i],
                                 'question': qs[i],
                                 'answer': ans[i],
                                 'predicted_answer': output
                                 }
 
-    print(full_gt_dict)
+    with open("./full_gt_dict_vqa.json", "w") as outfile:
+        json.dump(full_gt_dict, outfile)
+
+    end_time = time.time()
+    total = round((end_time - start_time) / 60, 2)
+    print('*** The Validation is finished in {} minutes ***'.format(total))
 
 
 

@@ -488,7 +488,6 @@ def generate2(
     question = ''
 ):
     model.eval()
-    generated_list = []
     # allo token index for . kai allo for EOS // tokenizer.eos_token_id
     stop_token_index = tokenizer.encode(stop_token)[0]
     eos_token_index = tokenizer.eos_token_id
@@ -541,11 +540,9 @@ def generate2(
                 if (stop_token_index == next_token.item() ) or eos_token_index == next_token.item() :
                     break
 
-            output_list = list(tokens.squeeze().cpu().numpy())
-            output_text = tokenizer.decode(output_list,skip_special_tokens=True)
-            generated_list.append(output_text)
+            output_text = tokenizer.decode(tokens.squeeze().cpu().numpy(), skip_special_tokens=True)
 
-    return generated_list[0]
+    return output_text
 
 class Predictor():
 
@@ -715,6 +712,7 @@ if __name__ == '__main__':
     gen = {}
     gts = {}
     full_gt_dict = {}
+    uni_dict = {}
     start_time = time.time()
 
     # todo
@@ -744,6 +742,15 @@ if __name__ == '__main__':
                                 }
 
     with open("./full_gt_dict_vqa.json", "w") as outfile:
+        json.dump(full_gt_dict, outfile)
+
+    uni_dict['gen'] = gen
+    uni_dict['gts'] = gts
+
+    with open("./full_gt_dict_vqa.json", "w") as outfile:
+        json.dump(full_gt_dict, outfile)
+
+    with open("./uni_dict_vqa.json", "w") as outfile:
         json.dump(full_gt_dict, outfile)
 
     end_time = time.time()

@@ -715,7 +715,7 @@ if __name__ == '__main__':
     start_time = time.time()
 
     # todo
-    temp_path  = 'checkpoints/my_coco_vqa_model_bestmodel.pt'
+    temp_path  = 'checkpoints/my_coco_ic_model_bestmodel.pt'
     mypredictor = Predictor(weights_path=temp_path)
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
@@ -728,9 +728,11 @@ if __name__ == '__main__':
     imid = val_dataset.image_ids
 
     for i,val in tqdm(enumerate(qs),total=len(qs)):
+        # zero shot
+        modified_question = "Please answer the question. Question:{} Answer:".format(qs[i])
         temp = im[i].to(device, dtype=torch.float32)
         output = mypredictor.predict_fast(prefix=temp.unsqueeze(0),
-                                          question=qs[i],
+                                          question=modified_question,  # qs[i]
                                           use_beam_search=False)
         gen[str(i)] = [output]
         gts[str(i)] = [ans[i]]

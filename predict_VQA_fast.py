@@ -712,7 +712,6 @@ if __name__ == '__main__':
     gen = {}
     gts = {}
     full_gt_dict = {}
-    uni_dict = {}
     start_time = time.time()
 
     # todo
@@ -742,15 +741,6 @@ if __name__ == '__main__':
                                 }
 
     with open("./full_gt_dict_vqa.json", "w") as outfile:
-        json.dump(full_gt_dict, outfile)
-
-    uni_dict['gen'] = gen
-    uni_dict['gts'] = gts
-
-    with open("./full_gt_dict_vqa.json", "w") as outfile:
-        json.dump(full_gt_dict, outfile)
-
-    with open("./uni_dict_vqa.json", "w") as outfile:
         json.dump(full_gt_dict, outfile)
 
     end_time = time.time()

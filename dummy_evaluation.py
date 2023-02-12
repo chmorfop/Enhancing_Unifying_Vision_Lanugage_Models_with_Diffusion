@@ -3,7 +3,7 @@ from evaluation.rouge.rouge import Rouge
 from evaluation.cider.cider import Cider
 from evaluation.meteor.meteor import Meteor
 from evaluation.tokenizer.ptbtokenizer import PTBTokenizer
-
+import json
 
 def score(ref, hypo):
     """
@@ -29,27 +29,33 @@ def score(ref, hypo):
 
 
 if __name__ == '__main__':
+
+    # Example ..
+    # gen = {}
+    # gts = {}
+    # caps_gt = [
+    #     'A train traveling down tracks next to lights.',
+    #     'A blue and silver train next to train station and trees.',
+    #     'A blue train is next to a sidewalk on the rails.',
+    #     'A passenger train pulls into a train station.',
+    #     'A train coming down the tracks arriving at a station.']
+
+    # caps_gen = ['train traveling down a track in front of a road']
+
+    # gen['0'] = caps_gen
+    # gts['0'] = caps_gt
+
+    temp_path = '/content/drive/MyDrive/Colab Notebooks/COCO/Results/full_gt_dict_vqa.json'
+
+    with open(temp_path) as json_file:
+        data = json.load(json_file)
+
     gen = {}
     gts = {}
-    caps_gt = [
-        'A train traveling down tracks next to lights.',
-        'A blue and silver train next to train station and trees.',
-        'A blue train is next to a sidewalk on the rails.',
-        'A passenger train pulls into a train station.',
-        'A train coming down the tracks arriving at a station.']
-
-    caps_gen = ['train traveling down a track in front of a road']
-
-    caps_gty = ['A narrow kitchen filled with appliances and cooking utensils.',
-                'A galley kitchen with cabinets and appliances on both sides',
-                'A hallway leading into a white kitchen with appliances.',
-                'Doorway view of a kitchen with a sink, stove, refrigerator and pantry.',
-                'The pantry door of the small kitchen is closed.']
-
-    caps_geny = ['A narrow kitchen with appliances ']
-
-    gen['0'] = caps_gen
-    gts['0'] = caps_gt
+    for k in data.keys() :
+      temp = data[k]
+      gen[k] = [temp.get('predicted_answer')]
+      gts[k] = [temp.get('answer')]
 
     gts = PTBTokenizer.tokenize(gts)
     gen = PTBTokenizer.tokenize(gen)

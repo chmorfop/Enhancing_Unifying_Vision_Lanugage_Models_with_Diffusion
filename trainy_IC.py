@@ -227,7 +227,6 @@ class TransformerMapper(nn.Module):
         x = self.linear(x).view(x.shape[0], self.clip_length, -1)
         prefix = self.prefix_const.unsqueeze(0).expand(x.shape[0], *self.prefix_const.shape)
         prefix = torch.cat((x, prefix), dim=1)
-        # TODO
         # dekati stili kai meta,
         # result 1x10x768   --  original output 1x20x768
         out = self.transformer(prefix)[:, self.clip_length:]
@@ -316,7 +315,6 @@ def load_model(config_path: str, epoch_or_latest: Union[str, int] = '_latest'):
 
 
 def apply_validation(model, val_dataloader, epoch, prefix_length):
-    # todo WRONG is for VQA not IC
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     val_loss = 0
     model.eval()
@@ -325,11 +323,7 @@ def apply_validation(model, val_dataloader, epoch, prefix_length):
         with torch.no_grad():
             outputs = model(tokens, prefix, mask)
             logits = outputs.logits[:, prefix_length - 1: -1]
-            new_mask = mask[:, 10:]
-            bool_mask = new_mask.ge(1).view(-1)
-            final_logits = logits.reshape(-1, logits.shape[-1])
-            finally_tok = tokens.view(-1)
-            loss = nnf.cross_entropy(final_logits[bool_mask], finally_tok[bool_mask], ignore_index=0)
+            loss = nnf.cross_entropy(logits.reshape(-1, logits.shape[-1]), tokens.flatten(), ignore_index=0)
             val_loss = val_loss + loss.item()
 
     avg_val_loss = val_loss / len(val_dataloader)
@@ -442,7 +436,7 @@ def generate_topk(
         prompt=None,
         embed=None,
         entry_count=1,
-        entry_length=30,  # maximum number of words
+        entry_length=50,  # maximum number of words
         top_p=0.8,
         temperature=1.0,
         stop_token: str = ".",
@@ -623,7 +617,7 @@ def main():
     # train(model, train_dataset, val_dataset, myconfig, output_dir=myconfig.get('out_dir'),
     #       model_name=myconfig.get('model_name'))
 
-    gen, gts, full_gt_dict = validation_generation(model, val_dataset, batch_size=32,
+    gen, gts, full_gt_dict = validation_generation(model, val_dataset, batch_size=64,
                                                    weights_path=myconfig.get('weights_path'))
     evaluation_metrics(gen, gts)
 

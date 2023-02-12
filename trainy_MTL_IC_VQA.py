@@ -561,10 +561,10 @@ def main():
         optimizer, num_warmup_steps=warmup_steps,
         num_training_steps=epochs * len(train_dataloader_ic))
 
-    for epoch in epochs:
+    for epoch in range(epochs):
         t_ic_dataloader = iter(train_dataloader_ic)
         t_vqa_dataloader = iter(train_dataloader_vqa)
-        progress = tqdm(train_dataloader_ic, total=len(train_dataloader_ic), desc='Epoch [{}/{}]'.format(epoch,epochs))
+        progress = tqdm(train_dataloader_ic, total=len(train_dataloader_ic), desc='Epoch [{}/{}]'.format(epoch,epochs-1))
         while True:
             model.train()
             model.zero_grad()

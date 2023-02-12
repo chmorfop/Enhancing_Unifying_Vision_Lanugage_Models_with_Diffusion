@@ -547,7 +547,7 @@ def main():
     counter_batch_vqa = 0
     train_loss_ic = 0
     train_loss_vqa = 0
-    lr = 2e-5,
+    lr = 2e-5
     warmup_steps= 500
     epochs = myconfig.get('epochs')
     output_dir = myconfig.get('out_dir')

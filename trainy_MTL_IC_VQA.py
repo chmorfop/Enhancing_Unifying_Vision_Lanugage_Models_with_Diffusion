@@ -481,6 +481,8 @@ def main():
         'train_data_vqa': '/home/chris/PycharmProjects/CLIP_prefix_caption/data/coco/oscar_split_ViT-B_32_trainy_vqa_1024.pkl',
         'val_data_vqa': '/home/chris/PycharmProjects/CLIP_prefix_caption/data/coco/oscar_split_ViT-B_32_trainy_vqa_1024.pkl',
         'out_dir': './outputdir',
+        'weight_loss_ic': 0.5,
+        'weight_loss_vqa': 0.5,
         'save_every': 1,
         'prefix_length': 10,
         'prefix_length_clip': 10,
@@ -506,33 +508,33 @@ def main():
                               num_layers=myconfig.get('num_layers'),
                               mapping_type=mapping_type)
 
-    train_dataset_IC = ClipCocoDataset_IC(myconfig.get('train_data_ic'),
+    train_dataset_ic = ClipCocoDataset_IC(myconfig.get('train_data_ic'),
                                           myconfig.get('prefix_length'),
                                           normalize_prefix=myconfig.get('normalize_prefix'))
-    val_dataset_IC = ClipCocoDataset_IC(myconfig.get('val_data_ic'),
+    val_dataset_ic = ClipCocoDataset_IC(myconfig.get('val_data_ic'),
                                         myconfig.get('prefix_length'),
                                         normalize_prefix=myconfig.get('normalize_prefix'))
 
-    train_dataset_VQA = ClipCocoDataset_VQA(myconfig.get('train_data_vqa'),
+    train_dataset_vqa = ClipCocoDataset_VQA(myconfig.get('train_data_vqa'),
                                             myconfig.get('prefix_length'),
                                             normalize_prefix=myconfig.get('normalize_prefix'))
-    val_dataset_VQA = ClipCocoDataset_VQA(myconfig.get('val_data_vqa'),
+    val_dataset_vqa = ClipCocoDataset_VQA(myconfig.get('val_data_vqa'),
                                           myconfig.get('prefix_length'),
                                           normalize_prefix=myconfig.get('normalize_prefix'))
 
-    train_dataloader_IC = DataLoader(train_dataset_IC, batch_size=myconfig.get('batch_size'), shuffle=False,
+    train_dataloader_ic = DataLoader(train_dataset_ic, batch_size=myconfig.get('batch_size'), shuffle=False,
                                      drop_last=False)
-    val_dataloader_IC = DataLoader(val_dataset_IC, batch_size=myconfig.get('batch_size'), shuffle=False,
+    val_dataloader_ic = DataLoader(val_dataset_ic, batch_size=myconfig.get('batch_size'), shuffle=False,
                                    drop_last=False)
 
-    train_dataloader_VQA = DataLoader(train_dataset_VQA, batch_size=myconfig.get('batch_size'), shuffle=False,
+    train_dataloader_vqa = DataLoader(train_dataset_vqa, batch_size=myconfig.get('batch_size'), shuffle=False,
                                       drop_last=False)
-    val_dataloader_VQA = DataLoader(val_dataset_VQA, batch_size=myconfig.get('batch_size'), shuffle=False,
+    val_dataloader_vqa = DataLoader(val_dataset_vqa, batch_size=myconfig.get('batch_size'), shuffle=False,
                                     drop_last=False)
 
     print('*** Lengths ***')
-    print(len(train_dataset_IC))
-    print(len(train_dataset_VQA))
+    print(len(train_dataset_ic))
+    print(len(train_dataset_vqa))
     print('*** Lengths ***')
     print()
 
@@ -541,8 +543,8 @@ def main():
     avg_val_loss_ic = []
     avg_val_loss_vqa = []
 
-    counter_batch_IC = 0
-    counter_batch_VQA = 0
+    counter_batch_ic = 0
+    counter_batch_vqa = 0
     train_loss_ic = 0
     train_loss_vqa = 0
     lr = 2e-5,
@@ -556,12 +558,13 @@ def main():
     model = model.to(device)
     optimizer = AdamW(model.parameters(), lr=lr)
     scheduler = get_linear_schedule_with_warmup(
-        optimizer, num_warmup_steps=warmup_steps, num_training_steps=epochs * len(train_dataloader_IC))
+        optimizer, num_warmup_steps=warmup_steps,
+        num_training_steps=epochs * len(train_dataloader_ic))
 
     for epoch in epochs:
-        t_ic_dataloader = iter(train_dataloader_IC)
-        t_vqa_dataloader = iter(train_dataloader_VQA)
-        progress = tqdm(train_dataloader_IC, total=len(train_dataloader_IC), desc='Epoch [{}/{}]'.format(epoch,epochs))
+        t_ic_dataloader = iter(train_dataloader_ic)
+        t_vqa_dataloader = iter(train_dataloader_vqa)
+        progress = tqdm(train_dataloader_ic, total=len(train_dataloader_ic), desc='Epoch [{}/{}]'.format(epoch,epochs))
         while True:
             model.train()
             model.zero_grad()
@@ -570,18 +573,18 @@ def main():
                 batch_vqa = next(t_vqa_dataloader)
             except StopIteration:
                 break
+
             (token_ic, mask_ic, prefix_ic) = batch_ic
             (tokens_vqa, mask_vqa, mask4gpt_vqa, prefix_vqa) = batch_vqa
-            temp_logits_ic , temp_tokens_ic = train_ic(model, token_ic, mask_ic, prefix_ic)
-            temp_logits_vqa , temp_tokens_vqa = train_vqa(model, tokens_vqa, mask_vqa, mask4gpt_vqa, prefix_vqa)
+            temp_logits_ic, temp_tokens_ic = train_ic(model, token_ic, mask_ic, prefix_ic)
+            temp_logits_vqa, temp_tokens_vqa = train_vqa(model, tokens_vqa, mask_vqa, mask4gpt_vqa, prefix_vqa)
 
-            weight_ic = 0.5
-            weight_vqa = 0.5
+            weight_ic = myconfig.get('weight_loss_ic')
+            weight_vqa = myconfig.get('weight_loss_vqa')
 
-            loss_ic = nnf.cross_entropy(temp_logits_ic,temp_tokens_ic, ignore_index = 0)
+            loss_ic = nnf.cross_entropy(temp_logits_ic, temp_tokens_ic, ignore_index = 0)
             loss_vqa = nnf.cross_entropy(temp_logits_vqa, temp_tokens_vqa, ignore_index = 0)
-
-            loss = weight_ic*loss_ic + weight_vqa*loss_vqa
+            loss = (weight_ic * loss_ic) + (weight_vqa * loss_vqa)
 
             loss.backward()
             optimizer.step()
@@ -591,30 +594,29 @@ def main():
             train_loss_ic = train_loss_ic + loss_ic.item()
             train_loss_vqa = train_loss_vqa + loss_vqa.item()
 
-            counter_batch_IC += mask_ic.shape[0]
-            counter_batch_VQA += mask_vqa.shape[0]
+            counter_batch_ic += mask_ic.shape[0]
+            counter_batch_vqa += mask_vqa.shape[0]
             progress.set_postfix({"Batch train_loss_ic": loss_ic.item(),
                                   "Batch train_loss_vqa": loss_vqa.item()})
             progress.update()
 
         progress.close()
-        epoch_avg_train_loss_ic = train_loss_ic / len(train_dataloader_IC)
-        epoch_avg_train_loss_vqa = train_loss_vqa / len(train_dataloader_IC)
+        epoch_avg_train_loss_ic = train_loss_ic / len(train_dataloader_ic)
+        epoch_avg_train_loss_vqa = train_loss_vqa / len(train_dataloader_ic)
 
         avg_train_loss_ic.append(epoch_avg_train_loss_ic)
         avg_train_loss_vqa.append(epoch_avg_train_loss_vqa)
 
         print()
-        print('Trained for total of {} samples in Image Captioning (IC).'.format(counter_batch_IC))
-        print('Trained for total of {} samples in Visual Question Answering (VQA).'.format(counter_batch_VQA))
+        print('Trained for total of {} samples in Image Captioning (IC).'.format(counter_batch_ic))
+        print('Trained for total of {} samples in Visual Question Answering (VQA).'.format(counter_batch_vqa))
         print()
 
-        epoch_avg_val_loss_ic = apply_validation_ic(model, val_dataloader_IC, epoch, prefix_length=10)
-        epoch_avg_val_loss_vqa = apply_validation_vqa(model, val_dataloader_VQA, epoch, prefix_length=10)
+        epoch_avg_val_loss_ic = apply_validation_ic(model, val_dataloader_ic, epoch, prefix_length=10)
+        epoch_avg_val_loss_vqa = apply_validation_vqa(model, val_dataloader_vqa, epoch, prefix_length=10)
 
         avg_val_loss_ic.append(epoch_avg_val_loss_ic)
         avg_val_loss_vqa.append(epoch_avg_val_loss_vqa)
-
 
         if epoch % myconfig.get('save_every') == 0 or epoch == epochs - 1:
             torch.save(
@@ -625,8 +627,8 @@ def main():
     print('####')
     print(avg_train_loss_ic)
     print(avg_train_loss_vqa)
-    print(epoch_avg_val_loss_ic)
-    print(epoch_avg_val_loss_vqa)
+    print(avg_val_loss_ic)
+    print(avg_val_loss_vqa)
     print('####')
 
 

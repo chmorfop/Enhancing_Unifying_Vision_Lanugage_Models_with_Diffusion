@@ -519,8 +519,8 @@ def main():
     myconfig = {
         'epochs': 4,
         'batch_size': 64,
-        'train_data': '/content/clipcap/data/coco/clip_feat_ViT-B_32_train_ic.pkl',
-        'val_data': '/home/chris/PycharmProjects/CLIP_prefix_caption/data/coco/oscar_split_ViT-B_32_trainy.pkl',
+        'train_data': './data/coco/clip_feat_ViT-B_32_train_ic.pkl',
+        'val_data': './data/coco/clip_feat_ViT-B_32_val_ic.pkl',
         'out_dir': './dialo_outputdir',
         'save_every': 1,
         'prefix_length': 10,

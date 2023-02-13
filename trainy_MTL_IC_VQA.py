@@ -543,8 +543,6 @@ def main():
     avg_val_loss_ic = []
     avg_val_loss_vqa = []
 
-    train_loss_ic = 0
-    train_loss_vqa = 0
     lr = 2e-5
     warmup_steps= 500
     epochs = myconfig.get('epochs')
@@ -560,6 +558,8 @@ def main():
         num_training_steps=epochs * len(train_dataloader_ic))
 
     for epoch in range(epochs):
+        train_loss_ic = 0
+        train_loss_vqa = 0
         counter_batch_ic = 0
         counter_batch_vqa = 0
         t_ic_dataloader = iter(train_dataloader_ic)

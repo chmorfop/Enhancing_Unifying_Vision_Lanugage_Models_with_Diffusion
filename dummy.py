@@ -328,9 +328,17 @@ from itertools import groupby
 #
 # print(result)
 
-import time
-start_time = time.time()
-time.sleep(4)
-end_time = time.time()
-total = round((end_time - start_time)/60,2)
-print(total)
+# import time
+# start_time = time.time()
+# time.sleep(4)
+# end_time = time.time()
+# total = round((end_time - start_time)/60,2)
+# print(total)
+data_path = '/home/chris/Desktop/clip_feat_ViT-B_32_val_ic.pkl'
+
+with open(data_path, 'rb') as f:
+    all_data = pickle.load(f)
+
+print(all_data.get('captions')[-1])
+
+# CUDA_VISIBLE_DEVICES=0,1,2,3,4,5,6,7 python -m torch.distributed.launch --nproc_per_nod=8 --master_port=29500 multi_gpu_gptj.py

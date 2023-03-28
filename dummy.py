@@ -340,5 +340,5 @@ with open(data_path, 'rb') as f:
     all_data = pickle.load(f)
 
 print(all_data.get('captions')[-1])
-
+# sto trial 10 epochs ic , to reference efere pio megalo
 # CUDA_VISIBLE_DEVICES=0,1,2,3,4,5,6,7 python -m torch.distributed.launch --nproc_per_nod=8 --master_port=29500 multi_gpu_gptj.py

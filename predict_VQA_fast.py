@@ -32,7 +32,7 @@ class ClipCocoDataset(Dataset):
 
     def pad_tokens(self, item: int):
         tokens = self.captions_tokens[item]
-        temp_ans = self.answers[item]
+        temp_ans = 0
         temp_q = self.questions[item]
         tokenized_answer = torch.tensor(self.tokenizer.encode(temp_ans), dtype=torch.int64)
         q_range = len(self.tokenizer.encode(temp_q))
@@ -91,32 +91,31 @@ class ClipCocoDataset(Dataset):
         captions_raw = all_data["captions"]
         # image ids kai captions
         self.image_ids = [caption["image_id"] for caption in captions_raw]
-        self.answers = [caption['answer'] for caption in captions_raw]
+        # self.answers = [caption['answer'] for caption in captions_raw]
         self.questions = [caption['question'] for caption in captions_raw]
-        ##
-        self.captions_tokens = []
-        self.caption2embedding = []
-        # self.temp_answers_tens = []
-        eos = self.tokenizer.eos_token_id
-        max_seq_len = 0
-        max_ans_len = 0
-        for i, caption in enumerate(captions_raw):
-            # tokenize to caption
-            self.captions_tokens.append(
-                torch.tensor(self.tokenizer.encode(caption['question'] + ' ' + caption['answer']) + [eos],
-                             dtype=torch.int64))
-            # clip_embedding einai to sequential ID !!
-            self.caption2embedding.append(caption["clip_embedding"])
-            max_seq_len = max(max_seq_len, self.captions_tokens[-1].shape[0])
-
-            temp = torch.tensor(self.tokenizer.encode(caption['answer']), dtype=torch.int64)
-            max_ans_len = max(max_ans_len, temp.shape[0])
-
-        all_len = torch.tensor([len(self.captions_tokens[i]) for i in range(len(self))]).float()
-        self.max_seq_len = min(int(all_len.mean() + all_len.std() * 10), int(all_len.max()))
-        self.max_ans_len = max_ans_len
-        print('max_seq_len of whole tokens :  ' + str(self.max_seq_len))
-        print('max_ans_len of answers :  ' + str(self.max_ans_len))
+        # ##
+        # self.captions_tokens = []
+        # self.caption2embedding = []
+        # # self.temp_answers_tens = []
+        # eos = self.tokenizer.eos_token_id
+        # max_seq_len = 0
+        # max_ans_len = 0
+        # for i, caption in enumerate(captions_raw):
+        #     # tokenize to caption
+        #         torch.tensor(self.tokenizer.encode(caption['question'] + ' ' + caption['answer']) + [eos],
+        #                      dtype=torch.int64))
+        #     # clip_embedding einai to sequential ID !!
+        #     self.caption2embedding.append(caption["clip_embedding"])
+        #     max_seq_len = max(max_seq_len, self.captions_tokens[-1].shape[0])
+        #
+        #     temp = torch.tensor(self.tokenizer.encode(caption['answer']), dtype=torch.int64)
+        #     max_ans_len = max(max_ans_len, temp.shape[0])
+        #
+        # all_len = torch.tensor([len(self.captions_tokens[i]) for i in range(len(self))]).float()
+        # self.max_seq_len = min(int(all_len.mean() + all_len.std() * 10), int(all_len.max()))
+        # self.max_ans_len = max_ans_len
+        # print('max_seq_len of whole tokens :  ' + str(self.max_seq_len))
+        # print('max_ans_len of answers :  ' + str(self.max_ans_len))
 
 
 class MLP(nn.Module):
@@ -150,6 +149,7 @@ class MlpTransformer(nn.Module):
         x = self.fc2(x)
         x = self.dropout(x)
         return x
+
 
 class MultiHeadAttention(nn.Module):
 
@@ -216,7 +216,7 @@ class Transformer(nn.Module):
 
     def forward(self, x, y=None, mask=None):
         for i, layer in enumerate(self.layers):
-            if i % 2 == 0 and self.enc_dec: # cross
+            if i % 2 == 0 and self.enc_dec:  # cross
                 x = layer(x, y)
             elif self.enc_dec:  # self
                 x = layer(x, x, mask)
@@ -237,7 +237,8 @@ class Transformer(nn.Module):
             if i % 2 == 0 and enc_dec:  # cross
                 layers.append(TransformerLayer(dim_self, dim_ref, num_heads, mlp_ratio, act=act, norm_layer=norm_layer))
             elif enc_dec:  # self
-                layers.append(TransformerLayer(dim_self, dim_self, num_heads, mlp_ratio, act=act, norm_layer=norm_layer))
+                layers.append(
+                    TransformerLayer(dim_self, dim_self, num_heads, mlp_ratio, act=act, norm_layer=norm_layer))
             else:  # self or cross
                 layers.append(TransformerLayer(dim_self, dim_ref, num_heads, mlp_ratio, act=act, norm_layer=norm_layer))
         self.layers = nn.ModuleList(layers)
@@ -287,7 +288,7 @@ class ClipCaptionModel(nn.Module):
             dummy_token = self.get_dummy_token(tokens.shape[0], tokens.device)
             labels = torch.cat((dummy_token, tokens), dim=1)
 
-        #TODO ti attention mask vazw gia to VQA?? pws kataskeazete? se poio apo ta 2 kanei focus?
+        # TODO ti attention mask vazw gia to VQA?? pws kataskeazete? se poio apo ta 2 kanei focus?
         out = self.gpt(inputs_embeds=embedding_cat, labels=labels, attention_mask=mask)
         print()
         return out
@@ -304,7 +305,7 @@ class ClipCaptionModel(nn.Module):
                                      self.gpt_embedding_size * prefix_length))
         else:
             self.clip_project = TransformerMapper(prefix_size, self.gpt_embedding_size, prefix_length,
-                                                                     clip_length, num_layers)
+                                                  clip_length, num_layers)
 
 
 class ClipCaptionPrefix(ClipCaptionModel):
@@ -350,8 +351,7 @@ def load_model(config_path: str, epoch_or_latest: Union[str, int] = '_latest'):
 
 def train(dataset: ClipCocoDataset, model: ClipCaptionModel, args,
           lr: float = 2e-5, warmup_steps: int = 5000, output_dir: str = ".", output_prefix: str = ""):
-
-    #device = torch.device('cuda:0')
+    # device = torch.device('cuda:0')
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     batch_size = args.bs
     epochs = args.epochs
@@ -397,18 +397,16 @@ def train(dataset: ClipCocoDataset, model: ClipCaptionModel, args,
     return model
 
 
-
 def generate_beam(
-    model,
-    tokenizer,
-    beam_size: int = 5,
-    prompt=None,
-    embed=None,
-    entry_length=67,
-    temperature=1.0,
-    stop_token: str = ".",
+        model,
+        tokenizer,
+        beam_size: int = 5,
+        prompt=None,
+        embed=None,
+        entry_length=67,
+        temperature=1.0,
+        stop_token: str = ".",
 ):
-
     model.eval()
     stop_token_index = tokenizer.encode(stop_token)[0]
     tokens = None
@@ -475,17 +473,17 @@ def generate_beam(
 
 
 def generate2(
-    model,
-    tokenizer,
-    tokens=None,
-    prompt=None,
-    embed=None,
-    entry_count=1,
-    entry_length=67,  # maximum number of words
-    top_p=0.8,
-    temperature=1.0,
-    stop_token: str = ".",
-    question = ''
+        model,
+        tokenizer,
+        tokens=None,
+        prompt=None,
+        embed=None,
+        entry_count=1,
+        entry_length=67,  # maximum number of words
+        top_p=0.8,
+        temperature=1.0,
+        stop_token: str = ".",
+        question=''
 ):
     model.eval()
     # allo token index for . kai allo for EOS // tokenizer.eos_token_id
@@ -498,7 +496,7 @@ def generate2(
 
         for entry_idx in range(entry_count):
             if embed is not None:
-                #generated = embed
+                # generated = embed
                 tok_q = torch.tensor(tokenizer.encode(question)).to(device)
                 embedding_text = model.gpt.transformer.wte(tok_q).unsqueeze(0)
                 generated = torch.cat((embed, embedding_text), dim=1)
@@ -523,8 +521,8 @@ def generate2(
                 )
                 sorted_indices_to_remove = cumulative_probs > top_p
                 sorted_indices_to_remove[..., 1:] = sorted_indices_to_remove[
-                    ..., :-1
-                ].clone()
+                                                    ..., :-1
+                                                    ].clone()
                 sorted_indices_to_remove[..., 0] = 0
 
                 indices_to_remove = sorted_indices[sorted_indices_to_remove]
@@ -537,16 +535,17 @@ def generate2(
                 else:
                     tokens = torch.cat((tokens, next_token), dim=1)
                 generated = torch.cat((generated, next_token_embed), dim=1)
-                if (stop_token_index == next_token.item() ) or eos_token_index == next_token.item() :
+                if (stop_token_index == next_token.item()) or eos_token_index == next_token.item():
                     break
 
             output_text = tokenizer.decode(tokens.squeeze().cpu().numpy(), skip_special_tokens=True)
 
     return output_text
 
+
 class Predictor():
 
-    def __init__(self,weights_path):
+    def __init__(self, weights_path):
         """Load the model into memory to make running multiple predictions efficient"""
         print('Initiating the Predictor')
         print('Utilizing weights path : ' + str(weights_path))
@@ -557,14 +556,14 @@ class Predictor():
         self.tokenizer = GPT2Tokenizer.from_pretrained("gpt2")
         self.prefix_length = 10
         mapping_type = {'mlp': MappingType.MLP, 'transformer': MappingType.Transformer}['transformer']
-        model = ClipCaptionPrefix(self.prefix_length, clip_length = 10,
-                                  prefix_size = 512, num_layers = 8, mapping_type = mapping_type)
+        model = ClipCaptionPrefix(self.prefix_length, clip_length=10,
+                                  prefix_size=512, num_layers=8, mapping_type=mapping_type)
         model.load_state_dict(torch.load(weights_path, map_location=CPU))
         model = model.eval()
         model = model.to(self.device)
         self.model = model
 
-    def predict(self, image_path,question, use_beam_search):
+    def predict(self, image_path, question, use_beam_search):
         """Run a single prediction on the model"""
         image = io.imread(image_path)
         model = self.model
@@ -579,17 +578,17 @@ class Predictor():
         if use_beam_search:
             return generate_beam(model, self.tokenizer, embed=prefix_embed)[0]
         else:
-            return generate2(model, self.tokenizer,question = question, embed=prefix_embed)
+            return generate2(model, self.tokenizer, question=question, embed=prefix_embed)
 
-
-    def predict_fast(self, prefix,question, use_beam_search):
+    def predict_fast(self, prefix, question, use_beam_search):
         """Run a single prediction on the model"""
         model = self.model
         prefix_embed = model.clip_project(prefix)
         if use_beam_search:
             return generate_beam(model, self.tokenizer, embed=prefix_embed)[0]
         else:
-            return generate2(model, self.tokenizer,question = question, embed=prefix_embed)
+            return generate2(model, self.tokenizer, question=question, embed=prefix_embed)
+
     def generate_per_batch(self, batch_size, masky):
         tokens = None
         device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
@@ -627,7 +626,8 @@ class Predictor():
                 tokenizer.decode(output[: int(length)], skip_special_tokens=True)
                 for output, length in zip(output_list, seq_lengths)]
         return output_texts
-    def custom_padding(self,q):
+
+    def custom_padding(self, q):
         max_len = 22
         padding = max_len - q.shape[0]
         if padding > 0:
@@ -644,7 +644,8 @@ class Predictor():
         mask = torch.FloatTensor(need_pred)
         mask = torch.cat((torch.ones(self.prefix_length), mask), dim=0)
         return tokens.unsqueeze(0), mask.unsqueeze(0)
-    def predict_batch_images(self,images,questions):
+
+    def predict_batch_images(self, images, questions):
 
         temperature = 1.0
         seq_lengths = torch.ones(12, device=self.device)
@@ -680,7 +681,7 @@ class Predictor():
         generated = torch.cat((prefix_embed, embedding_text), dim=1)
         with torch.no_grad():
             for i in range(30):
-                outputs = model.gpt(inputs_embeds=generated,attention_mask=temp_qmasks)
+                outputs = model.gpt(inputs_embeds=generated, attention_mask=temp_qmasks)
                 logits = outputs.logits
                 logits = logits[:, -1, :]
                 logits = logits.softmax(-1).log()
@@ -706,49 +707,39 @@ class Predictor():
         return output_texts
 
 
-
 if __name__ == '__main__':
-
-    gen = {}
-    gts = {}
-    full_gt_dict = {}
+    full_gt_dict = []
     start_time = time.time()
 
     # todo
-    temp_path  = 'checkpoints/my_coco_ic_model_bestmodel.pt'
+    temp_path = 'visdial_vqa/visdial_vqa_model_bestmodel.pt'
     mypredictor = Predictor(weights_path=temp_path)
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
     # todo
-    val_dataset = ClipCocoDataset('/home/chris/PycharmProjects/CLIP_prefix_caption/data/coco/oscar_split_ViT-B_32_trainy_vqa_1024.pkl',
-                                  10,normalize_prefix=False)
+    val_dataset = ClipCocoDataset(
+        '/iarai/home/chris.morfopoulos/pycharm_connection/clip_cap_prj/CLIP_prefix_caption/data/coco/clip_feat_ViT-B_32_test_vqa.pkl',
+        10, normalize_prefix=False)
     qs = val_dataset.questions
-    ans = val_dataset.answers
     im = val_dataset.prefixes
-    imid = val_dataset.image_ids
 
-    for i,val in tqdm(enumerate(qs),total=len(qs)):
+    temp_path = '/iarai/home/chris.morfopoulos/pycharm_connection/clip_cap_prj/CLIP_prefix_caption/data/coco/annotations/vqa_test2015_questions.json'
+    with open(temp_path) as json_file:
+        question_id_list = json.load(json_file).get('questions')
+
+    for i, val in tqdm(enumerate(qs), total=len(qs)):
         # zero shot
-        modified_question = "Please answer the question. Question:{} Answer:".format(qs[i])
+        # modified_question = "Please answer the question. Question:{} Answer:".format(qs[i])
         temp = im[i].to(device, dtype=torch.float32)
         output = mypredictor.predict_fast(prefix=temp.unsqueeze(0),
-                                          question=modified_question,  # qs[i]
+                                          question=qs[i],
                                           use_beam_search=False)
-        gen[str(i)] = [output]
-        gts[str(i)] = [ans[i]]
-        full_gt_dict[str(i)] = {'image_id': imid[i],
-                                'question': qs[i],
-                                'answer': ans[i],
-                                'predicted_answer': output
-                                }
-
-    with open("./full_gt_dict_vqa.json", "w") as outfile:
+        full_gt_dict.append({'question_id': question_id_list[i].get('question_id'), 'answer': output.strip()})
+        if i == 10:
+            break
+    with open("./full_gt_dict_vqa_visdial.json", "w") as outfile:
         json.dump(full_gt_dict, outfile)
 
     end_time = time.time()
     total = round((end_time - start_time) / 60, 2)
     print('*** The Validation is finished in {} minutes ***'.format(total))
-
-
-
-

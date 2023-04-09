@@ -12,14 +12,22 @@ import argparse
 import json
 import numpy as np
 from typing import Tuple, Optional, Union
-# import matplotlib.pyplot as plt
 import copy
-# from evaluation.bleu.bleu import Bleu
-# from evaluation.rouge.rouge import Rouge
-# from evaluation.cider.cider import Cider
-# from evaluation.meteor.meteor import Meteor
-# from evaluation.tokenizer.ptbtokenizer import PTBTokenizer
 import time
+import clip
+import torch.nn.functional as F
+from diffusers import StableDiffusionPipeline
+# from diffusers.utils import logging
+import logging
+from datetime import date
+
+from torch.nn.parallel import DistributedDataParallel as DDP
+import torch.distributed as dist
+from torch.utils.data.distributed import DistributedSampler
+from torch.distributed import init_process_group, destroy_process_group
+
+torch.multiprocessing.set_sharing_strategy('file_system')
+
 
 class MappingType(Enum):
     MLP = 'mlp'
@@ -71,6 +79,7 @@ class ClipCocoDataset(Dataset):
         # image ids kai captions
         self.image_ids = [caption["image_id"] for caption in captions_raw]
         self.captions = [caption['caption'] for caption in captions_raw]
+
         self.captions_tokens = []
         self.caption2embedding = []
         max_seq_len = 0
@@ -308,12 +317,12 @@ def load_model(config_path: str, epoch_or_latest: Union[str, int] = '_latest'):
     return model, parser
 
 
-def apply_validation(model, val_dataloader, epoch, prefix_length):
-    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+def apply_validation(model, val_dataloader, epoch, rank, prefix_length):
+    # device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     val_loss = 0
     model.eval()
     for idx, (tokens, mask, prefix) in enumerate(val_dataloader):
-        tokens, mask, prefix = tokens.to(device), mask.to(device), prefix.to(device, dtype=torch.float32)
+        tokens, mask, prefix = tokens.to(rank), mask.to(rank), prefix.to(rank, dtype=torch.float32)
         with torch.no_grad():
             outputs = model(tokens, prefix, mask)
             logits = outputs.logits[:, prefix_length - 1: -1]
@@ -340,29 +349,84 @@ class EarlyStopping:
                 self.early_stop = True
 
 
-def train(model: ClipCaptionModel, train_dataset: ClipCocoDataset,
-          val_dataset: ClipCocoDataset, myconfig, lr: float = 2e-5,
-          warmup_steps: int = 5000, output_dir: str = ".", model_name: str = ""):
+# class ContrastiveLoss(nn.Module):
+#     def __init__(self, margin=2.0):
+#         super(ContrastiveLoss, self).__init__()
+#         self.margin = margin
+#
+#     def forward(self, x1, x2, target):
+#         distance = F.cosine_similarity(x1, x2)
+#         loss = torch.mean((1 - distance) ** 2) + \
+#                torch.mean(torch.clamp(self.margin - F.pairwise_distance(x1, x2), min=0.0) ** 2)
+#         loss = loss * target + (1 - target) * torch.max(torch.zeros_like(loss), self.margin - distance)
+#         return loss.mean()
+#
+
+class ContrastiveLoss(nn.Module):
+    def __init__(self, margin=2.0):
+        super(ContrastiveLoss, self).__init__()
+        self.margin = margin
+
+    def forward(self, x1, x2):
+        distance = F.cosine_similarity(x1, x2)
+        loss = torch.mean((1 - distance) ** 2) + \
+               torch.mean(torch.clamp(self.margin - F.pairwise_distance(x1, x2), min=0.0) ** 2)
+        return loss
+
+def generate_diffusion(tokens, temp_tokenizer, pipe, clip_model, preprocess):
+    captions = [temp_tokenizer.decode(t, skip_special_tokens=True).replace('!', '') for t in tokens]
+    # caption = temp_tokenizer.decode(tokens, skip_special_tokens=True)
+    # image = pipe(captions).images[0]
+    gen_images = pipe(captions).images
+    clip_embe_list = []
+    for g in gen_images:
+        g_clip = preprocess(g).unsqueeze(0).to('cuda')
+        with torch.no_grad():
+            clip_embe_list.append(clip_model.encode_image(g_clip))
+    gen_prefix = torch.cat(clip_embe_list, dim=0)
+    return gen_prefix
+
+
+def train(rank: int , model: ClipCaptionModel, train_dataset: ClipCocoDataset,
+          val_dataset: ClipCocoDataset, myconfig, output_dir: str , model_name: str , world_size: int):
+
+    lr = 2e-5
+    warmup_steps = 5000
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-    # test_tokenizer = GPT2Tokenizer.from_pretrained('gpt2')
+
+    temp_tokenizer = GPT2Tokenizer.from_pretrained('gpt2')
     if not os.path.exists(output_dir):
         os.makedirs(output_dir)
 
-    model = model.to(device)
-    optimizer = AdamW(model.parameters(), lr=lr)
+
+    model = model.cuda()
+    model = DDP(model, device_ids=[rank])
+
+    optimizer = AdamW(model.module.parameters(), lr=lr)
     batch_size = myconfig.get('batch_size')
     epochs = myconfig.get('epochs')
 
-    train_dataloader = DataLoader(train_dataset, batch_size=batch_size, shuffle=False, drop_last=False)
-    val_dataloader = DataLoader(val_dataset, batch_size=batch_size, shuffle=False, drop_last=False)
+    train_sampler = sampler = DistributedSampler(train_dataset, shuffle=True)
+    train_dataloader = DataLoader(train_dataset, batch_size=batch_size, drop_last=False, sampler=train_sampler,
+                                  pin_memory=True)
 
-    # earlystop = EarlyStopping(tolerance=5,delta=0.5)
+    val_sampler = sampler = DistributedSampler(val_dataset, shuffle=False)
+    val_dataloader = DataLoader(val_dataset, batch_size=batch_size, drop_last=False, sampler=val_sampler,
+                                pin_memory=True)
+
     scheduler = get_linear_schedule_with_warmup(
         optimizer, num_warmup_steps=warmup_steps, num_training_steps=epochs * len(train_dataloader)
     )
     avg_train_loss = []
     avg_val_loss = []
     max_val_loss = float('+inf')
+
+    model_id = "CompVis/stable-diffusion-v1-4"
+    pipe = StableDiffusionPipeline.from_pretrained(model_id, torch_dtype=torch.float16)
+    pipe = pipe.to(rank)
+    clip_model, preprocess = clip.load("ViT-B/32", device=rank, jit=False)
+
+    criterion = ContrastiveLoss()
 
     print('*** Initiate Training Phase *** ')
     print()
@@ -372,11 +436,25 @@ def train(model: ClipCaptionModel, train_dataset: ClipCocoDataset,
         for idx, (tokens, mask, prefix) in enumerate(train_dataloader):
             model.train()
             model.zero_grad()
-            tokens, mask, prefix = tokens.to(device), mask.to(device), prefix.to(device, dtype=torch.float32)
+            tokens, mask, prefix = tokens.to(rank), mask.to(rank), prefix.to(rank, dtype=torch.float32)
 
             outputs = model(tokens, prefix, mask)
             logits = outputs.logits[:, train_dataset.prefix_length - 1: -1]
-            loss = nnf.cross_entropy(logits.reshape(-1, logits.shape[-1]), tokens.flatten(), ignore_index=0)
+
+            # Compute the contrastive loss
+            gen_prefix = generate_diffusion(tokens, temp_tokenizer, pipe, clip_model, preprocess)
+            loss_E = criterion(gen_prefix, prefix)
+            loss_IC = nnf.cross_entropy(logits.reshape(-1, logits.shape[-1]), tokens.flatten(), ignore_index=0)
+
+            loss = (0.9*loss_IC) + (0.1*loss_E)
+            logging.info('{} Epoch {} Batch --- loss_IC: {} - loss_Diff: {} scaled_loss_IC: {} - scaled_loss_Diff: {} Loss: {}) '.format(
+                                                                                                                                 epochs,
+                                                                                                                                 idx,
+                                                                                                                                 loss_IC,
+                                                                                                                                 loss_E,
+                                                                                                                                 0.9*loss_IC,
+                                                                                                                                 0.1*loss_E,loss))
+
             train_loss = train_loss + loss.item()
             loss.backward()
             optimizer.step()
@@ -391,13 +469,8 @@ def train(model: ClipCaptionModel, train_dataset: ClipCocoDataset,
         avg_train_loss.append(epoch_avg_train_loss)
         print('*** In Epoch {} the average train loss : {} ***'.format(epoch, epoch_avg_train_loss))
 
-        epoch_avg_val_loss = apply_validation(model, val_dataloader, epoch, prefix_length=val_dataset.prefix_length)
+        epoch_avg_val_loss = apply_validation(model, val_dataloader, epoch, rank=rank, prefix_length=val_dataset.prefix_length)
         avg_val_loss.append(epoch_avg_val_loss)
-
-        # earlystop(epoch_avg_train_loss,epoch_avg_val_loss)
-        # if earlystop.early_stop:
-        #     print('*** Exit Training due to Early Stopping ( at Epoch {} ) ***'.format(epoch))
-        #     break
 
         if epoch_avg_val_loss < max_val_loss:
             best_model = copy.deepcopy(model)
@@ -412,14 +485,6 @@ def train(model: ClipCaptionModel, train_dataset: ClipCocoDataset,
                 os.path.join(output_dir, f"{model_name}-{epoch:03d}.pt"),
             )
 
-    # fig, axes = plt.subplots(1, figsize=(15, 15))
-    # plt.plot([e for e in range(epochs)], avg_train_loss, color='b', linestyle='-', label='Training loss')
-    # plt.plot([e for e in range(epochs)], avg_val_loss, color='r', linestyle='--', label='Validation loss')
-    # plt.title('Training Loss & Epochs', fontsize=16)
-    # plt.xlabel('Epochs', fontsize=16)
-    # plt.ylabel('Loss', fontsize=16)
-    # plt.legend()
-    # plt.savefig('./train_val_loss_{}.png'.format(myconfig.get('model_name')))
     return model
 
 
@@ -478,112 +543,93 @@ def generate_topk(
     return output_texts
 
 
-def merge(list1, list2):
-    assert len(list1) == len(list2)
-    merged_list = [(list1[i], list2[i]) for i in range(0, len(list1))]
-    return merged_list
+
+def is_dist_avail_and_initialized():
+    if not dist.is_available():
+        return False
+    if not dist.is_initialized():
+        return False
+    return True
 
 
-def group_reference_captions(gt_image_ids, gt_captions):
-    mrg = merge(gt_image_ids, gt_captions)
-    temp_dict = {}
-    for key, value in mrg:
-        if key in temp_dict:
-            temp_dict[key].append(value)
-        else:
-            temp_dict[key] = [value]
-    return temp_dict
+def get_world_size():
+    if not is_dist_avail_and_initialized():
+        return 1
+    return dist.get_world_size()
 
 
-def validation_generation(model, val_dataset, batch_size, weights_path=None):
-    start_time = time.time()
-    full_gt_dict = {}
-    gen = {}
-    gts = {}
-    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-    val_dataloader = DataLoader(val_dataset, batch_size=batch_size, shuffle=False, drop_last=False)
-    tokenizer = GPT2Tokenizer.from_pretrained("gpt2")
-    generated_captions = []
-
-    gt_image_ids = val_dataset.image_ids
-    gt_captions = val_dataset.captions
-    group_dict = group_reference_captions(gt_image_ids, gt_captions)
-
-    model.load_state_dict(torch.load(weights_path, map_location=device))
-    model = model.to(device)
-    model.eval()
-
-    for (captions, mask, prefix) in tqdm(val_dataloader, total=len(val_dataloader), desc='Generate Captions'):
-        captions, mask, prefix = captions.to(device), mask.to(device), prefix.to(device, dtype=torch.float32)
-
-        with torch.no_grad():
-            prefix_embed = model.clip_project(prefix)
-            output = generate_topk(model, tokenizer, embed=prefix_embed)
-            generated_captions.extend(output)
-
-    assert len(generated_captions) == len(gt_captions)
-
-    for i, (pred_a, gt_a) in enumerate(zip(generated_captions, gt_captions)):
-        gen[str(i)] = [pred_a]
-        gts[str(i)] = [gt_a]
-        full_gt_dict[str(i)] = {'image_id': gt_image_ids[i],
-                                'original_caption': gt_captions[i],
-                                'generated_caption': pred_a,
-                                'reference_captions': group_dict.get(gt_image_ids[i])
-                                }
-
-    with open("./full_gt_dict_ic.json", "w") as outfile:
-        json.dump(full_gt_dict, outfile)
-
-    end_time = time.time()
-    total = round((end_time - start_time) / 60, 2)
-    print('*** The Validation is finished in {} minutes ***'.format(total))
-    return gen, gts, full_gt_dict
+def get_rank():
+    if not is_dist_avail_and_initialized():
+        return 0
+    return dist.get_rank()
 
 
-def score(ref, hypo):
+def is_main_process():
+    return get_rank() == 0
+
+
+def save_on_master(*args, **kwargs):
+    if is_main_process():
+        torch.save(*args, **kwargs)
+
+
+def setup_for_distributed(is_master):
     """
-    ref, dictionary of reference sentences (id, sentence)
-    hypo, dictionary of hypothesis sentences (id, sentence)
-    score, dictionary of scores
+    This function disables printing when not in master process
     """
-    scorers = [
-        (Bleu(4), ["Bleu_1", "Bleu_2", "Bleu_3", "Bleu_4"]),
-        (Meteor(), "METEOR"),
-        (Rouge(), "ROUGE_L"),
-        (Cider(), "CIDEr")
-    ]
-    final_scores = {}
-    for scorer, method in scorers:
-        score, scores = scorer.compute_score(ref, hypo)
-        if type(score) == list:
-            for m, s in zip(method, score):
-                final_scores[m] = s
-        else:
-            final_scores[method] = score
-    return final_scores
+    import builtins as __builtin__
+    builtin_print = __builtin__.print
+
+    def print(*args, **kwargs):
+        force = kwargs.pop('force', False)
+        if is_master or force:
+            builtin_print(*args, **kwargs)
+
+    __builtin__.print = print
 
 
-def evaluation_metrics(gen, gts):
-    print('*** Calculating Evaluation Metrics ***')
-    start_time = time.time()
+def init_distributed_mode():
+    # launched with torch.distributed.launch
+    if 'RANK' in os.environ and 'WORLD_SIZE' in os.environ:
+        rank = int(os.environ["RANK"])
+        world_size = int(os.environ['WORLD_SIZE'])
+        gpu = int(os.environ['LOCAL_RANK'])
+    # launched with submitit on a slurm cluster
+    elif 'SLURM_PROCID' in os.environ:
+        rank = int(os.environ['SLURM_PROCID'])
+        gpu = args.rank % torch.cuda.device_count()
+    # launched naively with `python main_dino.py`
+    # we manually add MASTER_ADDR and MASTER_PORT to env variables
+    elif torch.cuda.is_available():
+        print('Will run the code on one GPU.')
+        rank, gpu, world_size = 0, 0, 1
+        os.environ['MASTER_ADDR'] = '127.0.0.1'
+        os.environ['MASTER_PORT'] = '29500'
+    else:
+        print('Does not support training without GPU.')
+        sys.exit(1)
 
-    gts = PTBTokenizer.tokenize(gts)
-    gen = PTBTokenizer.tokenize(gen)
-    print(score(gts, gen))
-    print()
-    end_time = time.time()
+    dist.init_process_group(
+        backend='nccl',
+        init_method='env://',
+        world_size=world_size,
+        rank=rank,
+    )
 
-    total = round((end_time - start_time) / 60, 2)
-    print('*** The Validation is finished in {} minutes ***'.format(total))
+    torch.cuda.set_device(gpu)
+    print('| distributed init (rank {}): {}'.format(rank, 'env://'), flush=True)
+    dist.barrier()
+    setup_for_distributed(rank == 0)
+    return gpu, rank, world_size
+
 
 def main():
     myconfig = {
-        'epochs': 6,
-        'batch_size': 32,
+        'epochs': 10,
+        'batch_size': 8,
         'train_data': './data/coco/clip_feat_ViT-B_32_train_ic.pkl',
         'val_data': './data/coco/clip_feat_ViT-B_32_val_ic.pkl',
-        'out_dir': './gen_diff_IC',
+        'out_dir': './diffusion_outputdir',
         'save_every': 1,
         'prefix_length': 10,
         'prefix_length_clip': 10,
@@ -592,11 +638,16 @@ def main():
         'num_layers': 8,
         'is_rn': False,
         'normalize_prefix': False,
-        'model_name': 'my_coco_ic_model',
-        'weights_path': ''
+        'model_name': 'diffusion_model',
 
     }
+    gpu, rank, world_size = init_distributed_mode()
+
+
     print('Logging args **** ' + str(myconfig))
+    today = str(date.today()).replace('-', '_')
+    logging.basicConfig(filename="mylogs/{}_{}.log".format(myconfig.get('model_name'), today), filemode='w', level=logging.INFO)
+
     prefix_dim = 640 if myconfig.get('is_rn') else 512
     print()
     train_dataset = ClipCocoDataset(myconfig.get('train_data'), myconfig.get('prefix_length'),
@@ -608,12 +659,11 @@ def main():
     model = ClipCaptionPrefix(myconfig.get('prefix_length'), clip_length=myconfig.get('prefix_length_clip'),
                               prefix_size=prefix_dim, num_layers=myconfig.get('num_layers'),
                               mapping_type=mapping_type)
-    train(model, train_dataset, val_dataset, myconfig, output_dir=myconfig.get('out_dir'),
-          model_name=myconfig.get('model_name'))
 
-    # gen, gts, full_gt_dict = validation_generation(model, val_dataset, batch_size=64,
-    #                                                weights_path=myconfig.get('weights_path'))
-    # evaluation_metrics(gen, gts)
+    world_size = torch.cuda.device_count()
+    print("GPU-devices : {} ".format(world_size))
+
+    train(gpu,model, train_dataset, val_dataset, myconfig, myconfig.get('out_dir'),myconfig.get('model_name'),world_size)
 
 
 if __name__ == '__main__':

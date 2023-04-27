@@ -14,14 +14,6 @@ import numpy as np
 from typing import Tuple, Optional, Union
 import copy
 import time
-from transformers import AutoModelForCausalLM, AutoTokenizer
-from torch.nn.parallel import DistributedDataParallel as DDP
-import torch.multiprocessing as mp
-from torch.utils.data.distributed import DistributedSampler
-from torch.distributed import init_process_group, destroy_process_group
-
-torch.multiprocessing.set_sharing_strategy('file_system')
-
 
 class MappingType(Enum):
     MLP = 'mlp'
@@ -61,7 +53,7 @@ class ClipCocoDataset(Dataset):
 
     def __init__(self, data_path: str, prefix_length: int, gpt2_type: str = "gpt2",
                  normalize_prefix=False):
-        self.tokenizer = AutoTokenizer.from_pretrained("PygmalionAI/pygmalion-6b")
+        self.tokenizer = GPT2Tokenizer.from_pretrained(gpt2_type)
         self.prefix_length = prefix_length
         self.normalize_prefix = normalize_prefix
         with open(data_path, 'rb') as f:
@@ -73,22 +65,16 @@ class ClipCocoDataset(Dataset):
         # image ids kai captions
         self.image_ids = [caption["image_id"] for caption in captions_raw]
         self.captions = [caption['caption'] for caption in captions_raw]
-        if os.path.isfile(f"{data_path[:-4]}_tokens.pkl"):
-            with open(f"{data_path[:-4]}_tokens.pkl", 'rb') as f:
-                self.captions_tokens, self.caption2embedding, self.max_seq_len = pickle.load(f)
-        else:
-            self.captions_tokens = []
-            self.caption2embedding = []
-            max_seq_len = 0
-            for caption in captions_raw:
-                # tokenize to caption
-                self.captions_tokens.append(torch.tensor(self.tokenizer.encode(caption['caption']), dtype=torch.int64))
-                # clip_embedding einai to sequential ID !!
-                self.caption2embedding.append(caption["clip_embedding"])
-                max_seq_len = max(max_seq_len, self.captions_tokens[-1].shape[0])
-            # self.max_seq_len = max_seq_len
-            with open(f"{data_path[:-4]}_tokens.pkl", 'wb') as f:
-                pickle.dump([self.captions_tokens, self.caption2embedding, max_seq_len], f)
+        self.captions_tokens = []
+        self.caption2embedding = []
+        max_seq_len = 0
+        for caption in captions_raw:
+            # tokenize to caption
+            self.captions_tokens.append(torch.tensor(self.tokenizer.encode(caption['caption']), dtype=torch.int64))
+            # clip_embedding einai to sequential ID !!
+            self.caption2embedding.append(caption["clip_embedding"])
+            max_seq_len = max(max_seq_len, self.captions_tokens[-1].shape[0])
+
         all_len = torch.tensor([len(self.captions_tokens[i]) for i in range(len(self))]).float()
         self.max_seq_len = min(int(all_len.mean() + all_len.std() * 10), int(all_len.max()))
         print('max_seq_len of tokens :  ' + str(self.max_seq_len))
@@ -264,7 +250,7 @@ class ClipCaptionModel(nn.Module):
         super(ClipCaptionModel, self).__init__()
         print('*** Initiating the ClipCaptionModel *** ')
         self.prefix_length = prefix_length
-        self.gpt = AutoModelForCausalLM.from_pretrained("PygmalionAI/pygmalion-6b")
+        self.gpt = GPT2LMHeadModel.from_pretrained('gpt2')
         # 768
         self.gpt_embedding_size = self.gpt.transformer.wte.weight.shape[1]
         if mapping_type == MappingType.MLP:
@@ -314,6 +300,113 @@ def load_model(config_path: str, epoch_or_latest: Union[str, int] = '_latest'):
     else:
         print(f"{model_path} is not exist")
     return model, parser
+
+
+def apply_validation(model, val_dataloader, epoch, prefix_length):
+    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+    val_loss = 0
+    model.eval()
+    for idx, (tokens, mask, prefix) in enumerate(val_dataloader):
+        tokens, mask, prefix = tokens.to(device), mask.to(device), prefix.to(device, dtype=torch.float32)
+        with torch.no_grad():
+            outputs = model(tokens, prefix, mask)
+            logits = outputs.logits[:, prefix_length - 1: -1]
+            loss = nnf.cross_entropy(logits.reshape(-1, logits.shape[-1]), tokens.flatten(), ignore_index=0)
+            val_loss = val_loss + loss.item()
+
+    avg_val_loss = val_loss / len(val_dataloader)
+    print('*** In Epoch {} the average validation loss : {} ***'.format(epoch, avg_val_loss))
+    return avg_val_loss
+
+
+class EarlyStopping:
+    def __init__(self, tolerance=5, delta=0.5):
+
+        self.tolerance = tolerance
+        self.delta = delta
+        self.counter = 0
+        self.early_stop = False
+
+    def __call__(self, train_loss, validation_loss):
+        if (validation_loss - train_loss) > self.delta:
+            self.counter += 1
+            if self.counter >= self.tolerance:
+                self.early_stop = True
+
+
+def train(model: ClipCaptionModel, train_dataset: ClipCocoDataset,
+          val_dataset: ClipCocoDataset, myconfig, lr: float = 2e-5,
+          warmup_steps: int = 5000, output_dir: str = ".", model_name: str = ""):
+    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+    # test_tokenizer = GPT2Tokenizer.from_pretrained('gpt2')
+    if not os.path.exists(output_dir):
+        os.makedirs(output_dir)
+
+    model = model.to(device)
+    optimizer = AdamW(model.parameters(), lr=lr)
+    batch_size = myconfig.get('batch_size')
+    epochs = myconfig.get('epochs')
+
+    train_dataloader = DataLoader(train_dataset, batch_size=batch_size, shuffle=False, drop_last=False)
+    val_dataloader = DataLoader(val_dataset, batch_size=batch_size, shuffle=False, drop_last=False)
+
+    # earlystop = EarlyStopping(tolerance=5,delta=0.5)
+    scheduler = get_linear_schedule_with_warmup(
+        optimizer, num_warmup_steps=warmup_steps, num_training_steps=epochs * len(train_dataloader)
+    )
+    avg_train_loss = []
+    avg_val_loss = []
+    max_val_loss = float('+inf')
+
+    print('*** Initiate Training Phase *** ')
+    print()
+    for epoch in range(epochs):
+        progress = tqdm(train_dataloader, total=len(train_dataloader), desc='Epoch [{}/{}]'.format(epoch, epochs - 1))
+        train_loss = 0
+        for idx, (tokens, mask, prefix) in enumerate(train_dataloader):
+            model.train()
+            model.zero_grad()
+            tokens, mask, prefix = tokens.to(device), mask.to(device), prefix.to(device, dtype=torch.float32)
+
+            outputs = model(tokens, prefix, mask)
+            logits = outputs.logits[:, train_dataset.prefix_length - 1: -1]
+            loss = nnf.cross_entropy(logits.reshape(-1, logits.shape[-1]), tokens.flatten(), ignore_index=0)
+            train_loss = train_loss + loss.item()
+            loss.backward()
+            optimizer.step()
+            scheduler.step()
+            optimizer.zero_grad()
+            progress.set_postfix({"Batch Train Loss": loss.item()})
+            progress.update()
+
+        progress.close()
+
+        epoch_avg_train_loss = train_loss / len(train_dataloader)
+        avg_train_loss.append(epoch_avg_train_loss)
+        print('*** In Epoch {} the average train loss : {} ***'.format(epoch, epoch_avg_train_loss))
+
+        epoch_avg_val_loss = apply_validation(model, val_dataloader, epoch, prefix_length=val_dataset.prefix_length)
+        avg_val_loss.append(epoch_avg_val_loss)
+
+        # earlystop(epoch_avg_train_loss,epoch_avg_val_loss)
+        # if earlystop.early_stop:
+        #     print('*** Exit Training due to Early Stopping ( at Epoch {} ) ***'.format(epoch))
+        #     break
+
+        if epoch_avg_val_loss < max_val_loss:
+            best_model = copy.deepcopy(model)
+            max_val_loss = epoch_avg_val_loss
+
+            torch.save(best_model.state_dict(), os.path.join(output_dir, f"{model_name}_bestmodel.pt"))
+            print(f'Best Validation loss  : {epoch_avg_val_loss}')
+
+        if epoch % myconfig.get('save_every') == 0 or epoch == epochs - 1:
+            torch.save(
+                model.state_dict(),
+                os.path.join(output_dir, f"{model_name}-{epoch:03d}.pt"),
+            )
+
+    return model
 
 
 def generate_topk(
@@ -388,149 +481,59 @@ def group_reference_captions(gt_image_ids, gt_captions):
     return temp_dict
 
 
-def apply_validation(model, val_dataloader, epoch,rank, prefix_length):
-    # device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-    val_loss = 0
+def validation_generation(model, val_dataset, batch_size, weights_path=None):
+    start_time = time.time()
+    full_gt_dict = {}
+    gen = {}
+    gts = {}
+    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+    val_dataloader = DataLoader(val_dataset, batch_size=batch_size, shuffle=False, drop_last=False)
+    tokenizer = GPT2Tokenizer.from_pretrained("gpt2")
+    generated_captions = []
+
+    gt_image_ids = val_dataset.image_ids
+    gt_captions = val_dataset.captions
+    group_dict = group_reference_captions(gt_image_ids, gt_captions)
+
+    model.load_state_dict(torch.load(weights_path, map_location=device))
+    model = model.to(device)
     model.eval()
-    for idx, (tokens, mask, prefix) in enumerate(val_dataloader):
-        tokens, mask, prefix = tokens.to(rank), mask.to(rank), prefix.to(rank, dtype=torch.float32)
+
+    for (captions, mask, prefix) in tqdm(val_dataloader, total=len(val_dataloader), desc='Generate Captions'):
+        captions, mask, prefix = captions.to(device), mask.to(device), prefix.to(device, dtype=torch.float32)
+
         with torch.no_grad():
-            outputs = model(tokens, prefix, mask)
-            logits = outputs.logits[:, prefix_length - 1: -1]
-            loss = nnf.cross_entropy(logits.reshape(-1, logits.shape[-1]), tokens.flatten(), ignore_index=0)
-            val_loss = val_loss + loss.item()
+            prefix_embed = model.clip_project(prefix)
+            output = generate_topk(model, tokenizer, embed=prefix_embed)
+            generated_captions.extend(output)
 
-    avg_val_loss = val_loss / len(val_dataloader)
-    print('*** In Epoch {} the average validation loss : {} ***'.format(epoch, avg_val_loss))
-    return avg_val_loss
+    assert len(generated_captions) == len(gt_captions)
 
+    for i, (pred_a, gt_a) in enumerate(zip(generated_captions, gt_captions)):
 
-class EarlyStopping:
-    def __init__(self, tolerance=5, delta=0.5):
+        full_gt_dict[str(i)] = {'image_id': gt_image_ids[i],
+                                'original_caption': gt_captions[i],
+                                'generated_caption': pred_a,
+                                'reference_captions': group_dict.get(gt_image_ids[i])
+                                }
 
-        self.tolerance = tolerance
-        self.delta = delta
-        self.counter = 0
-        self.early_stop = False
+    with open("./dict_ic.json", "w") as outfile:
+        json.dump(full_gt_dict, outfile)
 
-    def __call__(self, train_loss, validation_loss):
-        if (validation_loss - train_loss) > self.delta:
-            self.counter += 1
-            if self.counter >= self.tolerance:
-                self.early_stop = True
+    end_time = time.time()
+    total = round((end_time - start_time) / 60, 2)
+    print('*** The Validation is finished in {} minutes ***'.format(total))
+    return gen, gts, full_gt_dict
 
-
-def train(rank: int , model: ClipCaptionModel, train_dataset: ClipCocoDataset,
-          val_dataset: ClipCocoDataset, myconfig, output_dir: str , model_name: str, world_size: int):
-    if not os.path.exists(output_dir):
-        os.makedirs(output_dir)
-    lr = 2e-5
-    warmup_steps = 5000
-    #device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-    ddp_setup(rank, world_size)
-    model = model.to(rank)
-    model = DDP(model, device_ids=[rank])
-
-    # model = nn.DataParallel(model.to(device))
-
-    # model = nn.Module(model)
-    # model = nn.DataParallel(model.to(device))
-    optimizer = AdamW(model.module.parameters(), lr=lr)
-    batch_size = myconfig.get('batch_size')
-    epochs = myconfig.get('epochs')
-
-    train_dataloader = DataLoader(train_dataset, batch_size=batch_size, shuffle=False, drop_last=False,
-                                  sampler=DistributedSampler(train_dataset,num_replicas=world_size,rank=rank),pin_memory=True)
-    val_dataloader = DataLoader(val_dataset, batch_size=batch_size, shuffle=False, drop_last=False,
-                                sampler=DistributedSampler(val_dataset,num_replicas=world_size,rank=rank),pin_memory=True)
-
-    # earlystop = EarlyStopping(tolerance=5,delta=0.5)
-    scheduler = get_linear_schedule_with_warmup(
-        optimizer, num_warmup_steps=warmup_steps, num_training_steps=epochs * len(train_dataloader)
-    )
-    avg_train_loss = []
-    avg_val_loss = []
-    max_val_loss = float('+inf')
-
-    print('*** Initiate Training Phase *** ')
-    print()
-    for epoch in range(epochs):
-        progress = tqdm(train_dataloader, total=len(train_dataloader), desc='Epoch [{}/{}]'.format(epoch, epochs - 1))
-        train_loss = 0
-        for idx, (tokens, mask, prefix) in enumerate(train_dataloader):
-            model.train()
-            model.zero_grad()
-            tokens, mask, prefix = tokens.to(rank), mask.to(rank), prefix.to(rank, dtype=torch.float32)
-
-            outputs = model(tokens, prefix, mask)
-            logits = outputs.logits[:, train_dataset.prefix_length - 1: -1]
-            loss = nnf.cross_entropy(logits.reshape(-1, logits.shape[-1]), tokens.flatten(), ignore_index=0)
-            train_loss = train_loss + loss.item()
-            loss.backward()
-            optimizer.step()
-            scheduler.step()
-            optimizer.zero_grad()
-            progress.set_postfix({"Batch Train Loss": loss.item()})
-            progress.update()
-
-        progress.close()
-
-        epoch_avg_train_loss = train_loss / len(train_dataloader)
-        avg_train_loss.append(epoch_avg_train_loss)
-        print('*** In Epoch {} the average train loss : {} ***'.format(epoch, epoch_avg_train_loss))
-
-        epoch_avg_val_loss = apply_validation(model, val_dataloader, epoch, rank=rank, prefix_length=val_dataset.prefix_length)
-        avg_val_loss.append(epoch_avg_val_loss)
-
-        # earlystop(epoch_avg_train_loss,epoch_avg_val_loss)
-        # if earlystop.early_stop:
-        #     print('*** Exit Training due to Early Stopping ( at Epoch {} ) ***'.format(epoch))
-        #     break
-
-        if epoch_avg_val_loss < max_val_loss:
-            best_model = copy.deepcopy(model)
-            max_val_loss = epoch_avg_val_loss
-
-            torch.save(best_model.module.state_dict(), os.path.join(output_dir, f"{model_name}_bestmodel.pt"))
-            print(f'Best Validation loss  : {epoch_avg_val_loss}')
-
-        if epoch % myconfig.get('save_every') == 0 or epoch == epochs - 1:
-            torch.save(
-                model.module.state_dict(),
-                os.path.join(output_dir, f"{model_name}-{epoch:03d}.pt"),
-            )
-
-
-
-    print('####')
-    print(avg_train_loss)
-    print(avg_val_loss)
-    print('####')
-    destroy_process_group()
-
-    return model
-
-
-
-
-def ddp_setup(rank, world_size):
-    """
-    Args:
-        rank: Unique identifier of each process
-        world_size: Total number of processes
-    """
-    os.environ["MASTER_ADDR"] = "localhost"
-    os.environ["MASTER_PORT"] = "12355"
-    init_process_group(backend="nccl", rank=rank, world_size=world_size)
 
 
 def main():
     myconfig = {
-        'epochs': 3,
-        'batch_size': 16,
+        'epochs': 6,
+        'batch_size': 32,
         'train_data': './data/coco/clip_feat_ViT-B_32_train_ic.pkl',
         'val_data': './data/coco/clip_feat_ViT-B_32_val_ic.pkl',
-        'out_dir': './pygmalion_outputdir',
+        'out_dir': './gen_diff_IC',
         'save_every': 1,
         'prefix_length': 10,
         'prefix_length_clip': 10,
@@ -539,37 +542,24 @@ def main():
         'num_layers': 8,
         'is_rn': False,
         'normalize_prefix': False,
-        'model_name': 'pygmalion_model',
+        'model_name': 'my_coco_ic_model',
         'weights_path': ''
 
     }
     print('Logging args **** ' + str(myconfig))
     prefix_dim = 640 if myconfig.get('is_rn') else 512
     print()
-    train_dataset = ClipCocoDataset(myconfig.get('train_data'),
-                                    myconfig.get('prefix_length'),
-                                    normalize_prefix=myconfig.get('normalize_prefix'))
-    val_dataset = ClipCocoDataset(myconfig.get('val_data'),
-                                  myconfig.get('prefix_length'),
+
+    val_dataset = ClipCocoDataset(myconfig.get('val_data'), myconfig.get('prefix_length'),
                                   normalize_prefix=myconfig.get('normalize_prefix'))
     mapping_type = {'mlp': MappingType.MLP, 'transformer': MappingType.Transformer}[myconfig.get('mapping_type')]
     print()
-    model = ClipCaptionPrefix(myconfig.get('prefix_length'),
-                              clip_length=myconfig.get('prefix_length_clip'),
-                              prefix_size=prefix_dim,
-                              num_layers=myconfig.get('num_layers'),
+    model = ClipCaptionPrefix(myconfig.get('prefix_length'), clip_length=myconfig.get('prefix_length_clip'),
+                              prefix_size=prefix_dim, num_layers=myconfig.get('num_layers'),
                               mapping_type=mapping_type)
 
-
-    world_size = torch.cuda.device_count()
-    print("GPU-devices : {} ".format(world_size))
-    mp.spawn(train, args=(
-          model, train_dataset,
-          val_dataset, myconfig,
-          myconfig.get('out_dir'),
-          myconfig.get('model_name'),
-          world_size)
-          , nprocs=world_size)
+    gen, gts, full_gt_dict = validation_generation(model, val_dataset, batch_size=64,
+                                                   weights_path=myconfig.get('weights_path'))
 
 
 if __name__ == '__main__':

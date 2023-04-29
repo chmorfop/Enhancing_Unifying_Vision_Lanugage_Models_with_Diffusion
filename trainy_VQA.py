@@ -12,13 +12,7 @@ import argparse
 import json
 import numpy as np
 from typing import Tuple, Optional, Union
-import matplotlib.pyplot as plt
 import copy
-from evaluation.bleu.bleu import Bleu
-from evaluation.rouge.rouge import Rouge
-from evaluation.cider.cider import Cider
-from evaluation.meteor.meteor import Meteor
-from evaluation.tokenizer.ptbtokenizer import PTBTokenizer
 
 
 class MappingType(Enum):
@@ -504,7 +498,6 @@ def train(model: ClipCaptionModel, train_dataset: ClipCocoDataset,
     train_dataloader = DataLoader(train_dataset, batch_size=batch_size, shuffle=False, drop_last=False)
     val_dataloader = DataLoader(val_dataset, batch_size=batch_size, shuffle=False, drop_last=False)
 
-    earlystop = EarlyStopping(tolerance=5, delta=0.5)
     scheduler = get_linear_schedule_with_warmup(
         optimizer, num_warmup_steps=warmup_steps, num_training_steps=epochs * len(train_dataloader)
     )
@@ -548,10 +541,6 @@ def train(model: ClipCaptionModel, train_dataset: ClipCocoDataset,
         epoch_avg_val_loss = apply_validation(model, val_dataloader, epoch, prefix_length=val_dataset.prefix_length)
         avg_val_loss.append(epoch_avg_val_loss)
 
-        earlystop(epoch_avg_train_loss, epoch_avg_val_loss)
-        if earlystop.early_stop:
-            print('*** Exit Training due to Early Stopping ( at Epoch {} ) ***'.format(epoch))
-            break
 
         if epoch_avg_val_loss < max_val_loss:
             best_model = copy.deepcopy(model)
@@ -566,53 +555,19 @@ def train(model: ClipCaptionModel, train_dataset: ClipCocoDataset,
                 os.path.join(output_dir, f"{model_name}-{epoch:03d}.pt"),
             )
 
-    fig, axes = plt.subplots(1, figsize=(15, 15))
-    plt.plot([e for e in range(epochs)], avg_train_loss, color='b', linestyle='-', label='Training loss')
-    plt.plot([e for e in range(epochs)], avg_val_loss, color='r', linestyle='--', label='Validation loss')
-    plt.title('Training Loss & Epochs', fontsize=16)
-    plt.xlabel('Epochs', fontsize=16)
-    plt.ylabel('Loss', fontsize=16)
-    plt.legend()
-    plt.savefig('./train_val_loss_{}.png'.format(myconfig.get('model_name')))
+
     return model
 
 
-def score(ref, hypo):
-    """
-    ref, dictionary of reference sentences (id, sentence)
-    hypo, dictionary of hypothesis sentences (id, sentence)
-    score, dictionary of scores
-    """
-    scorers = [
-        (Bleu(4), ["Bleu_1", "Bleu_2", "Bleu_3", "Bleu_4"]),
-        (Meteor(), "METEOR"),
-        (Rouge(), "ROUGE_L"),
-        (Cider(), "CIDEr")
-    ]
-    final_scores = {}
-    for scorer, method in scorers:
-        score, scores = scorer.compute_score(ref, hypo)
-        if type(score) == list:
-            for m, s in zip(method, score):
-                final_scores[m] = s
-        else:
-            final_scores[method] = score
-    return final_scores
-
-
-def evaluation_metrics(gen, gts):
-    gts = PTBTokenizer.tokenize(gts)
-    gen = PTBTokenizer.tokenize(gen)
-    print(score(gts, gen))
 
 
 def main():
     myconfig = {
-        'epochs': 1,
-        'batch_size': 1,
-        'train_data': './data/coco/clip_feat_ViT-B_32_train_vqa.pkl',
-        'val_data': '/home/chris/PycharmProjects/CLIP_prefix_caption/data/coco/oscar_split_ViT-B_32_trainy_vqa_1024.pkl',
-        'out_dir': './outputdir',
+        'epochs': 10,
+        'batch_size': 32,
+        'train_data': './data/vizwiz/clip_feat_ViT-B_32_train_vqa.pkl',
+        'val_data': './data/vizwiz/clip_feat_ViT-B_32_val_vqa.pkl',
+        'out_dir': './vizwiz_VQA',
         'save_every': 1,
         'prefix_length': 10,
         'prefix_length_clip': 10,
@@ -621,15 +576,15 @@ def main():
         'num_layers': 8,
         'is_rn': False,
         'normalize_prefix': False,
-        'model_name': 'my_coco_vqa_model',
-        'weights_path': '/home/chris/PycharmProjects/CLIP_prefix_caption/checkpoints/my_coco_vqa_model_bestmodel.pt'
+        'model_name': 'vizwiz_vqa_model',
+        'weights_path': './vizwiz_VQA/vizwiz_vqa_model_bestmodel.pt'
 
     }
     print('Logging args **** ' + str(myconfig))
     prefix_dim = 640 if myconfig.get('is_rn') else 512
     print()
-    # train_dataset = ClipCocoDataset(myconfig.get('train_data'), myconfig.get('prefix_length'),
-    #                                 normalize_prefix=myconfig.get('normalize_prefix'))
+    train_dataset = ClipCocoDataset(myconfig.get('train_data'), myconfig.get('prefix_length'),
+                                    normalize_prefix=myconfig.get('normalize_prefix'))
     val_dataset = ClipCocoDataset(myconfig.get('val_data'), myconfig.get('prefix_length'),
                                   normalize_prefix=myconfig.get('normalize_prefix'))
     mapping_type = {'mlp': MappingType.MLP, 'transformer': MappingType.Transformer}[myconfig.get('mapping_type')]
@@ -637,11 +592,9 @@ def main():
     model = ClipCaptionPrefix(myconfig.get('prefix_length'), clip_length=myconfig.get('prefix_length_clip'),
                               prefix_size=prefix_dim, num_layers=myconfig.get('num_layers'),
                               mapping_type=mapping_type)
-    # train(model, train_dataset, val_dataset, myconfig, output_dir=myconfig.get('out_dir'),
-    #       model_name=myconfig.get('model_name'))
-
-    gen, gts, full_gt_dict = validation_generation(model, val_dataset, weights_path=myconfig.get('weights_path'))
-    evaluation_metrics(gen, gts)
+    train(model, train_dataset, val_dataset, myconfig, output_dir=myconfig.get('out_dir'),
+          model_name=myconfig.get('model_name'))
+    # gen, gts, full_gt_dict = validation_generation(model, val_dataset, weights_path=myconfig.get('weights_path'))
 
 
 if __name__ == '__main__':

@@ -9,29 +9,28 @@ from tqdm import tqdm
 import argparse
 
 
+
 def main(clip_model_type: str):
+
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     print('device : {}'.format(device))
     clip_model_name = clip_model_type.replace('/', '_')
-    out_path = f"/content/clipcap/data/visdial/clip_feat_{clip_model_name}_val_ic.pkl"
+    out_path = f"./data/vizwiz/clip_feat_{clip_model_name}_test_vqa.pkl"
     clip_model, preprocess = clip.load(clip_model_type, device=device, jit=False)
-    annotation_path = '/content/drive/MyDrive/Colab Notebooks/Visual_Dialog/visdial_1.0_val.json'
+    annotation_path = './data/vizwiz/annotations_vqa/test.json'
     with open(annotation_path, 'r') as f:
-        ann = json.load(f).get('data')
+        ann = json.load(f)
 
-    dialogs = ann['dialogs']
-
-    print("# %0d image_anns loaded from json " % len(dialogs))
-
+    print("# %0d QAs loaded from json " % len(ann))
     all_embeddings = []
     all_captions = []
-    for i in tqdm(range(len(dialogs))):
-        temp_ann_img_id = dialogs[i].get('image_id')
-        temp_ann_caption = dialogs[i].get('caption')
-        prepath = '/content/clipcap/output/'
-        filename = f"VisualDialog_val2018/VisualDialog_val2018_{int(temp_ann_img_id):012d}.jpg"
+    for i in tqdm(range(len(ann))):
+        temp_ann_img = ann[i].get('image')
+        temp_ann_img_id = int(temp_ann_img.split('_test_')[1].split('.jpg')[0])
+        prepath = "./data/vizwiz"
+        filename = "/test/" + temp_ann_img
         try:
-            image = io.imread(prepath + filename)
+            image = io.imread(prepath+filename)
         except Exception as e:
             print(i, temp_ann_img_id)
             print(e)
@@ -40,10 +39,11 @@ def main(clip_model_type: str):
         with torch.no_grad():
             prefix = clip_model.encode_image(image).cpu()
         temp_dict = {
-            'caption': temp_ann_caption,
-            'clip_embedding': i,
-            'image_id': temp_ann_img_id,
-        }
+                     'question': ann[i].get('question'),
+                     'answer': '',
+                     'clip_embedding': i,
+                     'image_id': temp_ann_img_id,
+                     }
         all_embeddings.append(prefix)
         all_captions.append(temp_dict)
     with open(out_path, 'wb') as f:

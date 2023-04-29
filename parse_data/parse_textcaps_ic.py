@@ -9,46 +9,40 @@ from tqdm import tqdm
 import argparse
 
 
-def try_to_open(image_id, prepath, filename):
-    try:
-        image = io.imread(prepath + filename)
-    except Exception as e:
-        image = try_to_open(prepath, filename=f"val2014/COCO_val2014_{int(image_id):012d}.jpg")
-    return image
-
 
 def main(clip_model_type: str):
+
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     print('device : {}'.format(device))
     clip_model_name = clip_model_type.replace('/', '_')
-    out_path = f"/content/clipcap/data/visdial/clip_feat_{clip_model_name}_train_ic.pkl"
+    out_path = f"./data/textcaps/clip_feat_{clip_model_name}_train_ic.pkl"
     clip_model, preprocess = clip.load(clip_model_type, device=device, jit=False)
-    annotation_path = '/content/drive/MyDrive/Colab Notebooks/Visual_Dialog/visdial_1.0_train.json'
+    annotation_path = './data/textcaps/train.json'
     with open(annotation_path, 'r') as f:
         ann = json.load(f).get('data')
 
-    dialogs = ann['dialogs']
-
-    print("# %0d image_anns loaded from json " % len(dialogs))
-
+    print("# %0d QAs loaded from json " % len(ann))
     all_embeddings = []
     all_captions = []
-    for i in tqdm(range(len(dialogs))):
-        temp_ann_img_id = dialogs[i].get('image_id')
-        temp_ann_caption = dialogs[i].get('caption')
-
-        image = try_to_open(image_id = temp_ann_img_id,
-                            prepath='/content/clipcap/output/',
-                            filename=f"train2014/COCO_train2014_{int(temp_ann_img_id):012d}.jpg")
-
+    for i in tqdm(range(len(ann))):
+        temp_ann_img_id = ann[i].get('image_id')
+        temp_image_pth = ann[i].get('image_path')
+        temp_ann_caption = ann[i].get('caption_str')
+        prepath = ".data/textcaps/"
+        try:
+            image = io.imread(prepath+temp_image_pth)
+        except Exception as e:
+            print(i, temp_ann_img_id)
+            print(e)
+            raise
         image = preprocess(Image.fromarray(image)).unsqueeze(0).to(device)
         with torch.no_grad():
             prefix = clip_model.encode_image(image).cpu()
         temp_dict = {
-            'caption': temp_ann_caption,
-            'clip_embedding': i,
-            'image_id': temp_ann_img_id,
-        }
+                     'caption': temp_ann_caption,
+                     'clip_embedding': i,
+                     'image_id': temp_ann_img_id,
+                     }
         all_embeddings.append(prefix)
         all_captions.append(temp_dict)
     with open(out_path, 'wb') as f:

@@ -80,7 +80,7 @@ class ClipCocoDataset(Dataset):
 
     def __init__(self, data_path: str, prefix_length: int, gpt2_type: str = "gpt2",
                  normalize_prefix=False):
-        self.tokenizer = GPT2Tokenizer.from_pretrained(gpt2_type)
+        self.tokenizer = GPT2Tokenizer.from_pretrained('gpt2-xl')
         self.prefix_length = prefix_length
         self.normalize_prefix = normalize_prefix
         with open(data_path, 'rb') as f:
@@ -298,7 +298,7 @@ class ClipCaptionModel(nn.Module):
         super(ClipCaptionModel, self).__init__()
         print('Initiating the ClipCaptionModel *** ')
         self.prefix_length = prefix_length
-        self.gpt = GPT2LMHeadModel.from_pretrained('gpt2')
+        self.gpt = GPT2LMHeadModel.from_pretrained('gpt2-xl')
         self.gpt_embedding_size = self.gpt.transformer.wte.weight.shape[1]
         if mapping_type == MappingType.MLP:
             self.clip_project = MLP((prefix_size, (self.gpt_embedding_size * prefix_length) // 2,
@@ -553,7 +553,7 @@ class Predictor():
         self.clip_model, self.preprocess = clip.load(
             "ViT-B/32", device=self.device, jit=False
         )
-        self.tokenizer = GPT2Tokenizer.from_pretrained("gpt2")
+        self.tokenizer = GPT2Tokenizer.from_pretrained("gpt2-xl")
         self.prefix_length = 10
         mapping_type = {'mlp': MappingType.MLP, 'transformer': MappingType.Transformer}['transformer']
         model = ClipCaptionPrefix(self.prefix_length, clip_length=10,
@@ -592,7 +592,7 @@ class Predictor():
     def generate_per_batch(self, batch_size, masky):
         tokens = None
         device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-        tokenizer = GPT2Tokenizer.from_pretrained("gpt2")
+        tokenizer = GPT2Tokenizer.from_pretrained("gpt2-xl")
         stop_token_index = tokenizer.encode('.')[0]
         eos_token_index = tokenizer.eos_token_id
         max_length = 67
@@ -718,14 +718,14 @@ if __name__ == '__main__':
 
     # todo
     val_dataset = ClipCocoDataset(
-        '/iarai/home/chris.morfopoulos/pycharm_connection/clip_cap_prj/CLIP_prefix_caption/data/coco/clip_feat_ViT-B_32_test_vqa.pkl',
+        './data/vizwiz/clip_feat_ViT-B_32_test_vqa.pkl',
         10, normalize_prefix=False)
     qs = val_dataset.questions
     im = val_dataset.prefixes
 
-    temp_path = '/iarai/home/chris.morfopoulos/pycharm_connection/clip_cap_prj/CLIP_prefix_caption/data/coco/annotations/vqa_test2015_questions.json'
+    temp_path = './data/vizwiz/annotations_vqa/test.json'
     with open(temp_path) as json_file:
-        question_id_list = json.load(json_file).get('questions')
+        question_id_list = json.load(json_file)
 
     for i, val in tqdm(enumerate(qs), total=len(qs)):
         # zero shot
@@ -734,10 +734,9 @@ if __name__ == '__main__':
         output = mypredictor.predict_fast(prefix=temp.unsqueeze(0),
                                           question=qs[i],
                                           use_beam_search=False)
-        full_gt_dict.append({'question_id': question_id_list[i].get('question_id'), 'answer': output.strip()})
-        if i == 10:
-            break
-    with open("./full_gt_dict_vqa_visdial.json", "w") as outfile:
+        full_gt_dict.append({'image': question_id_list[i].get('image'), 'answer': output.strip()})
+
+    with open("./dict_vizwiz_VQA_xl.json", "w") as outfile:
         json.dump(full_gt_dict, outfile)
 
     end_time = time.time()

@@ -53,7 +53,7 @@ class ClipCocoDataset(Dataset):
 
     def __init__(self, data_path: str, prefix_length: int, gpt2_type: str = "gpt2",
                  normalize_prefix=False):
-        self.tokenizer = GPT2Tokenizer.from_pretrained(gpt2_type)
+        self.tokenizer = GPT2Tokenizer.from_pretrained('gpt2')
         self.prefix_length = prefix_length
         self.normalize_prefix = normalize_prefix
         with open(data_path, 'rb') as f:
@@ -387,10 +387,10 @@ def train(model: ClipCaptionModel, train_dataset: ClipCocoDataset,
         avg_val_loss.append(epoch_avg_val_loss)
 
         if epoch_avg_val_loss < max_val_loss:
-            best_model = copy.deepcopy(model)
+            # best_model = copy.deepcopy(model)
             max_val_loss = epoch_avg_val_loss
 
-            torch.save(best_model.state_dict(), os.path.join(output_dir, f"{model_name}_bestmodel.pt"))
+            # torch.save(best_model.state_dict(), os.path.join(output_dir, f"{model_name}_bestmodel.pt"))
             print(f'Best Validation loss  : {epoch_avg_val_loss}')
 
         if epoch % myconfig.get('save_every') == 0 or epoch == epochs - 1:
@@ -474,7 +474,6 @@ def validation_generation(model, val_dataset, batch_size, weights_path=None):
     generated_captions = []
 
     gt_image_ids = val_dataset.image_ids
-    gt_captions = val_dataset.captions
 
     model.load_state_dict(torch.load(weights_path, map_location=device))
     model = model.to(device)
@@ -488,9 +487,7 @@ def validation_generation(model, val_dataset, batch_size, weights_path=None):
             output = generate_topk(model, tokenizer, embed=prefix_embed)
             generated_captions.extend(output)
 
-    assert len(generated_captions) == len(gt_captions)
-
-    for i, (pred_a, gt_a) in enumerate(zip(generated_captions, gt_captions)):
+    for i, pred_a in enumerate(generated_captions):
         full_gt_dict.append({'image_id': gt_image_ids[i],
                             'caption': pred_a
                             })
@@ -501,7 +498,7 @@ def validation_generation(model, val_dataset, batch_size, weights_path=None):
     end_time = time.time()
     total = round((end_time - start_time) / 60, 2)
     print('*** The Validation is finished in {} minutes ***'.format(total))
-    return  full_gt_dict
+    return full_gt_dict
 
 
 
@@ -509,9 +506,9 @@ def main():
     myconfig = {
         'epochs': 10,
         'batch_size': 32,
-        'train_data': './data/vizwiz/clip_feat_ViT-B_32_train_ic.pkl',
-        'val_data': './data/vizwiz/clip_feat_ViT-B_32_val_ic.pkl',
-        'out_dir': './vizwiz_IC',
+        'train_data': './data/textcaps/clip_feat_ViT-B_32_train_ic.pkl',
+        'val_data': './data/textcaps/clip_feat_ViT-B_32_test_ic.pkl',
+        'out_dir': './textcaps_IC_xl',
         'save_every': 1,
         'prefix_length': 10,
         'prefix_length_clip': 10,
@@ -520,15 +517,15 @@ def main():
         'num_layers': 8,
         'is_rn': False,
         'normalize_prefix': False,
-        'model_name': 'vizwiz_ic_model',
+        'model_name': 'textcaps_ic_xl_model',
         'weights_path': './vizwiz_IC/vizwiz_ic_model_bestmodel.pt'
 
     }
     print('Logging args **** ' + str(myconfig))
     prefix_dim = 640 if myconfig.get('is_rn') else 512
     print()
-    train_dataset = ClipCocoDataset(myconfig.get('train_data'), myconfig.get('prefix_length'),
-                                    normalize_prefix=myconfig.get('normalize_prefix'))
+    # train_dataset = ClipCocoDataset(myconfig.get('train_data'), myconfig.get('prefix_length'),
+    #                                 normalize_prefix=myconfig.get('normalize_prefix'))
     val_dataset = ClipCocoDataset(myconfig.get('val_data'), myconfig.get('prefix_length'),
                                   normalize_prefix=myconfig.get('normalize_prefix'))
     mapping_type = {'mlp': MappingType.MLP, 'transformer': MappingType.Transformer}[myconfig.get('mapping_type')]
@@ -536,11 +533,10 @@ def main():
     model = ClipCaptionPrefix(myconfig.get('prefix_length'), clip_length=myconfig.get('prefix_length_clip'),
                               prefix_size=prefix_dim, num_layers=myconfig.get('num_layers'),
                               mapping_type=mapping_type)
-    train(model, train_dataset, val_dataset, myconfig, output_dir=myconfig.get('out_dir'),
-          model_name=myconfig.get('model_name'))
+    # train(model, train_dataset, val_dataset, myconfig, output_dir=myconfig.get('out_dir'),
+    #       model_name=myconfig.get('model_name'))
 
-    gen, gts, full_gt_dict = validation_generation(model, val_dataset, batch_size=32,
-                                                   weights_path=myconfig.get('weights_path'))
+    full_gt_dict = validation_generation(model, val_dataset, batch_size=16, weights_path=myconfig.get('weights_path'))
 
 
 if __name__ == '__main__':

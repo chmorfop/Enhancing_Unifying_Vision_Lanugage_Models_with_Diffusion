@@ -75,7 +75,7 @@ class ClipCocoDataset(Dataset):
 
     def __init__(self, data_path: str, prefix_length: int, gpt2_type: str = "gpt2",
                  normalize_prefix=False):
-        self.tokenizer = GPT2Tokenizer.from_pretrained(gpt2_type)
+        self.tokenizer = GPT2Tokenizer.from_pretrained('gpt2-xl')
         self.prefix_length = prefix_length
         self.normalize_prefix = normalize_prefix
         with open(data_path, 'rb') as f:
@@ -295,7 +295,7 @@ class ClipCaptionModel(nn.Module):
         super(ClipCaptionModel, self).__init__()
         print('*** Initiating the ClipCaptionModel *** ')
         self.prefix_length = prefix_length
-        self.gpt = GPT2LMHeadModel.from_pretrained('gpt2')
+        self.gpt = GPT2LMHeadModel.from_pretrained('gpt2-xl')
         # 768
         self.gpt_embedding_size = self.gpt.transformer.wte.weight.shape[1]
         if mapping_type == MappingType.MLP:
@@ -387,7 +387,7 @@ class EarlyStopping:
 def generate_per_batch(model, prefix, question, batch_size,masky):
     tokens = None
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-    tokenizer = GPT2Tokenizer.from_pretrained("gpt2")
+    tokenizer = GPT2Tokenizer.from_pretrained("gpt2-xl")
     stop_token_index = tokenizer.encode('.')[0]
     eos_token_index = tokenizer.eos_token_id
     max_length = 67
@@ -486,7 +486,6 @@ def train(model: ClipCaptionModel, train_dataset: ClipCocoDataset,
           val_dataset: ClipCocoDataset, myconfig, lr: float = 2e-5,
           warmup_steps: int = 5000, output_dir: str = ".", model_name: str = ""):
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-    # test_tokenizer = GPT2Tokenizer.from_pretrained('gpt2')
     if not os.path.exists(output_dir):
         os.makedirs(output_dir)
 
@@ -543,10 +542,10 @@ def train(model: ClipCaptionModel, train_dataset: ClipCocoDataset,
 
 
         if epoch_avg_val_loss < max_val_loss:
-            best_model = copy.deepcopy(model)
+            # best_model = copy.deepcopy(model)
             max_val_loss = epoch_avg_val_loss
 
-            torch.save(best_model.state_dict(), os.path.join(output_dir, f"{model_name}_bestmodel.pt"))
+            # torch.save(best_model.state_dict(), os.path.join(output_dir, f"{model_name}_bestmodel.pt"))
             print(f'Best Validation loss  : {epoch_avg_val_loss}')
 
         if epoch % myconfig.get('save_every') == 0 or epoch == epochs - 1:
@@ -554,6 +553,12 @@ def train(model: ClipCaptionModel, train_dataset: ClipCocoDataset,
                 model.state_dict(),
                 os.path.join(output_dir, f"{model_name}-{epoch:03d}.pt"),
             )
+
+    print()
+    print('####')
+    print(avg_train_loss)
+    print(avg_val_loss)
+    print('####')
 
 
     return model
@@ -564,10 +569,10 @@ def train(model: ClipCaptionModel, train_dataset: ClipCocoDataset,
 def main():
     myconfig = {
         'epochs': 10,
-        'batch_size': 32,
+        'batch_size': 8,
         'train_data': './data/vizwiz/clip_feat_ViT-B_32_train_vqa.pkl',
         'val_data': './data/vizwiz/clip_feat_ViT-B_32_val_vqa.pkl',
-        'out_dir': './vizwiz_VQA',
+        'out_dir': './vizwiz_VQA_xl',
         'save_every': 1,
         'prefix_length': 10,
         'prefix_length_clip': 10,
@@ -576,8 +581,8 @@ def main():
         'num_layers': 8,
         'is_rn': False,
         'normalize_prefix': False,
-        'model_name': 'vizwiz_vqa_model',
-        'weights_path': './vizwiz_VQA/vizwiz_vqa_model_bestmodel.pt'
+        'model_name': 'vizwiz_vqa_model_xl',
+        'weights_path': './vizwiz_VQA_xl/vizwiz_vqa_model_xl_bestmodel.pt'
 
     }
     print('Logging args **** ' + str(myconfig))

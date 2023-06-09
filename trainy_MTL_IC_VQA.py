@@ -462,11 +462,11 @@ def main():
     myconfig = {
         'epochs': 10,
         'batch_size': 32,
-        'train_data_ic': './data/vizwiz/clip_feat_ViT-B_32_train_ic.pkl',
+        'train_data_ic': './data/vizwiz/combined_gen_clipscore_feat_train_ic.pkl',
         'val_data_ic': './data/vizwiz/clip_feat_ViT-B_32_val_ic.pkl',
         'train_data_vqa': './data/vizwiz/clip_feat_ViT-B_32_train_vqa.pkl',
         'val_data_vqa': './data/vizwiz/clip_feat_ViT-B_32_val_vqa.pkl',
-        'out_dir': './MTL_model_vizwiz',
+        'out_dir': './MTL_diffu_model_vizwiz',
         'weight_loss_ic': 0.5,
         'weight_loss_vqa': 0.5,
         'save_every': 1,
@@ -477,7 +477,7 @@ def main():
         'num_layers': 8,
         'is_rn': False,
         'normalize_prefix': False,
-        'model_name': 'MTL_model',
+        'model_name': 'MTL_diffu_model_vizwiz',
         'weights_path': ''
 
     }

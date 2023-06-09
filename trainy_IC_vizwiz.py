@@ -506,9 +506,9 @@ def main():
     myconfig = {
         'epochs': 10,
         'batch_size': 32,
-        'train_data': './data/textcaps/clip_feat_ViT-B_32_train_ic.pkl',
-        'val_data': './data/textcaps/clip_feat_ViT-B_32_test_ic.pkl',
-        'out_dir': './textcaps_IC_xl',
+        'train_data': './data/vizwiz/combined_gen_clipscore_feat_train_ic.pkl',
+        'val_data': './data/vizwiz/clip_feat_ViT-B_32_val_ic.pkl',
+        'out_dir': './vizwiz_clipscore',
         'save_every': 1,
         'prefix_length': 10,
         'prefix_length_clip': 10,
@@ -517,15 +517,15 @@ def main():
         'num_layers': 8,
         'is_rn': False,
         'normalize_prefix': False,
-        'model_name': 'textcaps_ic_xl_model',
-        'weights_path': './vizwiz_IC/vizwiz_ic_model_bestmodel.pt'
+        'model_name': 'vizwiz_clipscore',
+        'weights_path': ''
 
     }
     print('Logging args **** ' + str(myconfig))
     prefix_dim = 640 if myconfig.get('is_rn') else 512
     print()
-    # train_dataset = ClipCocoDataset(myconfig.get('train_data'), myconfig.get('prefix_length'),
-    #                                 normalize_prefix=myconfig.get('normalize_prefix'))
+    train_dataset = ClipCocoDataset(myconfig.get('train_data'), myconfig.get('prefix_length'),
+                                    normalize_prefix=myconfig.get('normalize_prefix'))
     val_dataset = ClipCocoDataset(myconfig.get('val_data'), myconfig.get('prefix_length'),
                                   normalize_prefix=myconfig.get('normalize_prefix'))
     mapping_type = {'mlp': MappingType.MLP, 'transformer': MappingType.Transformer}[myconfig.get('mapping_type')]
@@ -533,10 +533,10 @@ def main():
     model = ClipCaptionPrefix(myconfig.get('prefix_length'), clip_length=myconfig.get('prefix_length_clip'),
                               prefix_size=prefix_dim, num_layers=myconfig.get('num_layers'),
                               mapping_type=mapping_type)
-    # train(model, train_dataset, val_dataset, myconfig, output_dir=myconfig.get('out_dir'),
-    #       model_name=myconfig.get('model_name'))
+    train(model, train_dataset, val_dataset, myconfig, output_dir=myconfig.get('out_dir'),
+          model_name=myconfig.get('model_name'))
 
-    full_gt_dict = validation_generation(model, val_dataset, batch_size=16, weights_path=myconfig.get('weights_path'))
+    # full_gt_dict = validation_generation(model, val_dataset, batch_size=16, weights_path=myconfig.get('weights_path'))
 
 
 if __name__ == '__main__':

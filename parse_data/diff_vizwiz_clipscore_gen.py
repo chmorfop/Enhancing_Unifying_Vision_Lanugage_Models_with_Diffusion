@@ -59,24 +59,30 @@ def main(clip_model_type: str):
     pipe = StableDiffusionPipeline.from_pretrained(model_id, torch_dtype=torch.float16)
     pipe = pipe.to("cuda")
     pipe.safety_checker = lambda images, clip_input: (images, False)
-
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     print('device : {}'.format(device))
     clip_model_name = clip_model_type.replace('/', '_')
     # TODO
-    out_path = f"./data/textcaps/batch_7_diffgen_clipscore_clip_feat_{clip_model_name}_train_ic.pkl"
+    out_path = f"./data/vizwiz/batch_7_diffgen_clipscore_clip_feat_{clip_model_name}_train_ic.pkl"
     clip_model, preprocess = clip.load(clip_model_type, device=device, jit=False)
-    annotation_path = './data/textcaps/train.json'
+    annotation_path = './data/vizwiz/annotations/train.json'
     with open(annotation_path, 'r') as f:
-        ann = json.load(f).get('data')
-
+        ann = json.load(f).get('annotations')
     print("# %0d QAs loaded from json " % len(ann))
     all_embeddings = []
     all_captions = []
     # TODO
-    for i in tqdm(range(95900,109765)):
+    correct_counter = 102200
+    # TODO
+    for i in tqdm(range(102200,117155)):
+        if ann[i].get('is_rejected'):
+            continue
         temp_ann_img_id = ann[i].get('image_id')
-        temp_ann_caption = ann[i].get('caption_str')
+        temp_ann_caption = ann[i].get('caption').lower()
+
+        temp_len = len(temp_ann_caption.split(' '))
+        if temp_len > 55:
+            continue
 
         tempy = 'High photo-realistic, ' + decapitalize_first_letter(temp_ann_caption)
         tempy_default_list = [temp_ann_caption] * 5
@@ -85,18 +91,19 @@ def main(clip_model_type: str):
         res_index = find_best_clip_score(temp_gen_images, tempy_default_list, clip_model, preprocess)
         image = temp_gen_images[res_index]
 
-        image.save('./data/textcaps/generative_images_clipscore/{}.jpg'.format(i))
+        image.save('./data/vizwiz/generative_images_clipscore/{}.jpg'.format(i))
         image = preprocess(image).unsqueeze(0).to(device)
 
         with torch.no_grad():
             prefix = clip_model.encode_image(image).cpu()
         temp_dict = {
             'caption': temp_ann_caption,
-            'clip_embedding': i,
+            'clip_embedding': correct_counter,
             'image_id': temp_ann_img_id,
         }
         all_embeddings.append(prefix)
         all_captions.append(temp_dict)
+        correct_counter = correct_counter + 1
 
     with open(out_path, 'wb') as f:
         pickle.dump({"clip_embedding": torch.cat(all_embeddings, dim=0), "captions": all_captions}, f)

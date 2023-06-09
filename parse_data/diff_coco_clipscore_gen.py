@@ -64,19 +64,19 @@ def main(clip_model_type: str):
     print('device : {}'.format(device))
     clip_model_name = clip_model_type.replace('/', '_')
     # TODO
-    out_path = f"./data/textcaps/batch_7_diffgen_clipscore_clip_feat_{clip_model_name}_train_ic.pkl"
+    out_path = f"./data/coco/batch_7_diffgen_clipscore_clip_feat_{clip_model_name}_train_ic.pkl"
     clip_model, preprocess = clip.load(clip_model_type, device=device, jit=False)
-    annotation_path = './data/textcaps/train.json'
+    annotation_path = './data/coco/annotations/captions_train2014.json'
     with open(annotation_path, 'r') as f:
-        ann = json.load(f).get('data')
+        ann = json.load(f).get('annotations')
 
     print("# %0d QAs loaded from json " % len(ann))
     all_embeddings = []
     all_captions = []
     # TODO
-    for i in tqdm(range(95900,109765)):
+    for i in tqdm(range(87500,100000)):
         temp_ann_img_id = ann[i].get('image_id')
-        temp_ann_caption = ann[i].get('caption_str')
+        temp_ann_caption = ann[i].get('caption')
 
         tempy = 'High photo-realistic, ' + decapitalize_first_letter(temp_ann_caption)
         tempy_default_list = [temp_ann_caption] * 5
@@ -85,7 +85,7 @@ def main(clip_model_type: str):
         res_index = find_best_clip_score(temp_gen_images, tempy_default_list, clip_model, preprocess)
         image = temp_gen_images[res_index]
 
-        image.save('./data/textcaps/generative_images_clipscore/{}.jpg'.format(i))
+        image.save('./data/coco/generative_images_clipscore/{}.jpg'.format(i))
         image = preprocess(image).unsqueeze(0).to(device)
 
         with torch.no_grad():

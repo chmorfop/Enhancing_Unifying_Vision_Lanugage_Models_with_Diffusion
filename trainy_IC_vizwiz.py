@@ -15,6 +15,7 @@ from typing import Tuple, Optional, Union
 import copy
 import time
 
+
 class MappingType(Enum):
     MLP = 'mlp'
     Transformer = 'transformer'
@@ -387,10 +388,10 @@ def train(model: ClipCaptionModel, train_dataset: ClipCocoDataset,
         avg_val_loss.append(epoch_avg_val_loss)
 
         if epoch_avg_val_loss < max_val_loss:
-            # best_model = copy.deepcopy(model)
+            best_model = copy.deepcopy(model)
             max_val_loss = epoch_avg_val_loss
 
-            # torch.save(best_model.state_dict(), os.path.join(output_dir, f"{model_name}_bestmodel.pt"))
+            torch.save(best_model.state_dict(), os.path.join(output_dir, f"{model_name}_bestmodel.pt"))
             print(f'Best Validation loss  : {epoch_avg_val_loss}')
 
         if epoch % myconfig.get('save_every') == 0 or epoch == epochs - 1:
@@ -463,7 +464,6 @@ def generate_topk(
     return output_texts
 
 
-
 def validation_generation(model, val_dataset, batch_size, weights_path=None):
     start_time = time.time()
     full_gt_dict = []
@@ -489,10 +489,11 @@ def validation_generation(model, val_dataset, batch_size, weights_path=None):
 
     for i, pred_a in enumerate(generated_captions):
         full_gt_dict.append({'image_id': gt_image_ids[i],
-                            'caption': pred_a
-                            })
+                             'caption': pred_a
+                             })
 
-    with open("./dict_vizwiz_ic.json", "w") as outfile:
+    pathy ='vizwiz_MTL_B_64IC_16VQA'
+    with open("/scratch/chris.morfopoulos/temp_code/ablation_/vizwiz_abl/dict_{}_IC.json".format(pathy), "w") as outfile:
         json.dump(full_gt_dict, outfile)
 
     end_time = time.time()
@@ -501,14 +502,14 @@ def validation_generation(model, val_dataset, batch_size, weights_path=None):
     return full_gt_dict
 
 
-
 def main():
     myconfig = {
         'epochs': 10,
         'batch_size': 32,
-        'train_data': './data/vizwiz/combined_gen_clipscore_feat_train_ic.pkl',
-        'val_data': './data/vizwiz/clip_feat_ViT-B_32_val_ic.pkl',
-        'out_dir': './vizwiz_clipscore',
+        # 'train_data': '/scratch/chris.morfopoulos/data/vizwiz/combined_gen_clipscore_40k_feat_train_ic.pkl',
+        # 'val_data': '/scratch/chris.morfopoulos/data/vizwiz/clip_feat_ViT-B_32_val_ic.pkl',
+        'test_data': '/scratch/chris.morfopoulos/data/vizwiz/clip_feat_ViT-B_32_test_ic.pkl',
+        'out_dir': '/scratch/chris.morfopoulos/temp_code/ablation_/vizwiz_abl/vizwiz_IC_80K',
         'save_every': 1,
         'prefix_length': 10,
         'prefix_length_clip': 10,
@@ -517,26 +518,30 @@ def main():
         'num_layers': 8,
         'is_rn': False,
         'normalize_prefix': False,
-        'model_name': 'vizwiz_clipscore',
-        'weights_path': ''
+        'model_name': 'vizwiz_IC_80K',
+        'weights_path': '/scratch/chris.morfopoulos/temp_code/ablation_/vizwiz_abl/vizwiz_MTL_B_64IC_16VQA/vizwiz_MTL_B_64IC_16VQA-009.pt'
 
     }
     print('Logging args **** ' + str(myconfig))
     prefix_dim = 640 if myconfig.get('is_rn') else 512
     print()
-    train_dataset = ClipCocoDataset(myconfig.get('train_data'), myconfig.get('prefix_length'),
-                                    normalize_prefix=myconfig.get('normalize_prefix'))
-    val_dataset = ClipCocoDataset(myconfig.get('val_data'), myconfig.get('prefix_length'),
-                                  normalize_prefix=myconfig.get('normalize_prefix'))
+    # train_dataset = ClipCocoDataset(myconfig.get('train_data'),
+    #                                 myconfig.get('prefix_length'),
+    #                                 normalize_prefix=myconfig.get('normalize_prefix'))
+    # val_dataset = ClipCocoDataset(myconfig.get('val_data'),
+    #                               myconfig.get('prefix_length'),
+    #                               normalize_prefix=myconfig.get('normalize_prefix'))
+    test_dataset = ClipCocoDataset(myconfig.get('test_data'),
+                                   myconfig.get('prefix_length'),
+                                   normalize_prefix=myconfig.get('normalize_prefix'))
     mapping_type = {'mlp': MappingType.MLP, 'transformer': MappingType.Transformer}[myconfig.get('mapping_type')]
     print()
     model = ClipCaptionPrefix(myconfig.get('prefix_length'), clip_length=myconfig.get('prefix_length_clip'),
                               prefix_size=prefix_dim, num_layers=myconfig.get('num_layers'),
                               mapping_type=mapping_type)
-    train(model, train_dataset, val_dataset, myconfig, output_dir=myconfig.get('out_dir'),
-          model_name=myconfig.get('model_name'))
-
-    # full_gt_dict = validation_generation(model, val_dataset, batch_size=16, weights_path=myconfig.get('weights_path'))
+    # train(model, train_dataset, val_dataset, myconfig, output_dir=myconfig.get('out_dir'),
+    #       model_name=myconfig.get('model_name'))
+    full_gt_dict = validation_generation(model, test_dataset, batch_size=16, weights_path=myconfig.get('weights_path'))
 
 
 if __name__ == '__main__':

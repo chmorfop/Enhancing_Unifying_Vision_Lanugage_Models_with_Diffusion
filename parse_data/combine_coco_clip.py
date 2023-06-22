@@ -4,12 +4,12 @@ import torch
 
 
 
-out_path = "./data/coco/combined_gen_clipscore_feat_train_ic.pkl"
+out_path = "/scratch/chris.morfopoulos/data/coco/combined_gen_100k_clip_feat_train_ic.pkl"
 
-with open('./data/coco/clip_feat_ViT-B_32_train_ic.pkl', 'rb') as f:
+with open('/scratch/chris.morfopoulos/data/coco/clip_feat_ViT-B_32_train_ic.pkl', 'rb') as f:
     old = pickle.load(f)
 
-with open('./data/coco/diffgen_clipscore_feat_ViT-B_32_train_ic.pkl', 'rb') as f:
+with open('/scratch/chris.morfopoulos/data/coco/diffgen_100k_clip_feat_ViT-B_32_train_ic.pkl', 'rb') as f:
     new = pickle.load(f)
 
 old_em = old.get('clip_embedding')

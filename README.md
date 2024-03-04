@@ -3,17 +3,13 @@
 
 ## Abstract
 In computer vision, image captioning is a challenging task, in which the goal
-
 is to bridge the gap between visual content and natural language understand-
 ing. Image captioning, as the name suggests, is the process where a descriptive
-
 caption is automatically generated from an image. Another challenging task
 is visual question answering, where a user can ask questions about an image
 and receive meaningful answers. In recent years, there is a lot of effort in the
-
 research community to improve both processes, by introducing different archi-
 tectures and methods. Image captioning and visual question answering are two
-
 very related vision-language tasks. However, they are treated individually.
 In this thesis, we follow a lightweight approach for image captioning and we
 made a thorough investigation of all its components. We then extend that
@@ -30,3 +26,14 @@ training set to create new, synthetic datasets. By controlling each generated
 image to be similar to the existing one corresponding to the caption, we verify
 that the synthetic datasets can assist to improve the performance of captioning,
 as well as visual question answering in the presence of multitask learning.
+
+
+## Diffusion - Clipscore
+
+## Ablation
+
+## Synthetic Images
+
+## Results
+**This repository consists mainly of 6 below notebooks**:
+* ***DoDUO_Finetune_MSP_Inference.ipynb***

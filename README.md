@@ -8,7 +8,7 @@ ing. Image captioning, as the name suggests, is the process where a descriptive
 caption is automatically generated from an image. Another challenging task
 is visual question answering, where a user can ask questions about an image
 and receive meaningful answers. In recent years, there is a lot of effort in the
-research community to improve both processes, by introducing different archi-
+research community to improve both processes, by introducing different archi
 tectures and methods. Image captioning and visual question answering are two
 very related vision-language tasks. However, they are treated individually.
 In this thesis, we follow a lightweight approach for image captioning and we

@@ -29,11 +29,27 @@ as well as visual question answering in the presence of multitask learning.
 
 
 ## Diffusion - Clipscore
+With the assistance of the diffusion models we can create synthetic datasets that can boost the model's predictive power
+we generate five candidate images corresponding to a textual input. The Clipscore for each generated image 
+is computed as the cosine similarity between its CLIP embeddings and the original caption. 
+Ultimately, the image with the highest Clipscore value is chosen.
+The main Stable diffusion model that we employed in our process is the “Compvis/stable-diffusion-v1-4”.
 
 ## Ablation
+In our ablation study we explore all the aspects of our architecture.
+Our key elements are Multi Task learning, Diffusion Approach and the size of the Decoder.
 
-## Synthetic Images
+![Example Image](images_md/3.png)
 
-## Results
-**This repository consists mainly of 6 below notebooks**:
-* ***DoDUO_Finetune_MSP_Inference.ipynb***
+
+
+**Synthetic Images based on training captions**:
+* ***![Example Image from TextCaps](images_md/1.png).ipynb***
+  
+* ***![Example Image from COCO](images_md/5.png).ipynb***
+
+**Results from our Multi Task Model**:
+* ***![Image Captioning](images_md/2.png).ipynb***
+  
+* ***![Visual Question Answering](images_md/4.png).ipynb***
+
